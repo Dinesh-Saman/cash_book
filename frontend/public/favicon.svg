@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="purpleBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#4f46e5" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle with glow -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#purpleBlueGrad)" filter="url(#glow)"/>
+
+  <!-- Book spine accent -->
+  <path d="M12 14C12 11.7909 13.7909 10 16 10H20V54H16C13.7909 54 12 52.2091 12 50V14Z" fill="#312e81" opacity="0.4"/>
+  <line x1="20" y1="10" x2="20" y2="54" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.5"/>
+
+  <!-- Ledger Pages line highlights -->
+  <rect x="25" y="16" width="23" height="4" rx="2" fill="#ffffff" fill-opacity="0.9"/>
+  <rect x="25" y="24" width="16" height="3" rx="1.5" fill="#ffffff" fill-opacity="0.75"/>
+  <rect x="25" y="31" width="20" height="3" rx="1.5" fill="#ffffff" fill-opacity="0.75"/>
+
+  <!-- Currency / Euro emblem circle -->
+  <circle cx="36" cy="43" r="8.5" fill="url(#goldGrad)"/>
+  <path d="M38.5 40C37.8 39.2 36.8 38.8 35.5 38.8C33.6 38.8 32.2 40.2 32.2 42.5C32.2 44.8 33.6 46.2 35.5 46.2C36.8 46.2 37.8 45.8 38.5 45M31 41.5H36.5M31 43.8H36.5" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
+</svg>
