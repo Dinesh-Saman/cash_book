@@ -11,7 +11,7 @@ import DeleteConfirmDialog from '../components/cashbook/DeleteConfirmDialog';
 import DocumentViewer from '../components/cashbook/DocumentViewer';
 import OpeningBalanceModal from '../components/cashbook/OpeningBalanceModal';
 import CustomSelect from '../components/ui/CustomSelect';
-import type { CashBookEntry, Settings } from '../types';
+import { type CashBookEntry, type Settings, getDefaultPermissions } from '../types';
 
 const MONTH_INDICES = Array.from({ length: 12 }, (_, i) => i + 1);
 const CURRENT_YEAR = new Date().getFullYear();
@@ -41,7 +41,11 @@ export default function CashBookPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const canEdit = user?.role === 'admin' || user?.role === 'accountant';
+  const userPerms = user?.permissions
+    ? { ...getDefaultPermissions(user.role), ...user.permissions }
+    : user
+    ? getDefaultPermissions(user.role)
+    : null;
 
   useEffect(() => {
     fetchEntries();
@@ -51,7 +55,8 @@ export default function CashBookPage() {
       .then((res) => {
         const s = res.data.data;
         setSettings(s);
-        if (!s.openingBalance && canEdit) setShowOpeningBalance(true);
+        const canManage = userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant');
+        if (!s.openingBalance && canManage) setShowOpeningBalance(true);
       })
       .catch(() => {});
   }, []);
@@ -105,7 +110,12 @@ export default function CashBookPage() {
   };
 
   const isYearFinalized = settings?.finalizedYears?.includes(selectedYear) || false;
-  const canModify = canEdit && !isYearFinalized;
+  const canAddIncome = (userPerms?.canAddIncome ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const canAddExpense = (userPerms?.canAddExpense ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const canEditEntry = (userPerms?.canEditEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const canDeleteEntry = (userPerms?.canDeleteEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const canManageSettings = (userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const canExport = userPerms?.canExportReports ?? true;
 
   return (
     <div className="space-y-6">
@@ -128,83 +138,91 @@ export default function CashBookPage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {canModify ? (
-            <>
-              <button
-                onClick={() => {
-                  setEditingEntry(null);
-                  setShowIncomeForm(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
-              >
-                <Plus size={17} className="stroke-[2.5]" />
-                {t('btnAddIncome')}
-              </button>
-              <button
-                onClick={() => {
-                  setEditingEntry(null);
-                  setShowExpenseForm(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
-              >
-                <Plus size={17} className="stroke-[2.5]" />
-                {t('btnAddExpense')}
-              </button>
-              <button
-                onClick={() => setShowOpeningBalance(true)}
-                className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-sm font-bold shadow-xs transition-all"
-                title={t('modalOpeningBalanceTitle')}
-              >
-                <Scale size={16} className="text-amber-700" />
-                <span>{t('tblOpeningBalance')}</span>
-              </button>
-            </>
-          ) : isYearFinalized && canEdit ? (
+          {canAddIncome && (
+            <button
+              onClick={() => {
+                setEditingEntry(null);
+                setShowIncomeForm(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
+            >
+              <Plus size={17} className="stroke-[2.5]" />
+              {t('btnAddIncome')}
+            </button>
+          )}
+
+          {canAddExpense && (
+            <button
+              onClick={() => {
+                setEditingEntry(null);
+                setShowExpenseForm(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
+            >
+              <Plus size={17} className="stroke-[2.5]" />
+              {t('btnAddExpense')}
+            </button>
+          )}
+
+          {canManageSettings && (
+            <button
+              onClick={() => setShowOpeningBalance(true)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-sm font-bold shadow-xs transition-all"
+              title={t('modalOpeningBalanceTitle')}
+            >
+              <Scale size={16} className="text-amber-700" />
+              <span>{t('tblOpeningBalance')}</span>
+            </button>
+          )}
+
+          {isYearFinalized && (canAddIncome || canAddExpense || canEditEntry) && (
             <span className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold">
               🔒 {t('statusInactive')}: {selectedYear}
             </span>
-          ) : null}
+          )}
 
           {/* Export Dropdown */}
-          <div className="relative z-50">
-            <button
-              onClick={() => setShowExportMenu((prev) => !prev)}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all border border-slate-200 shadow-xs"
-            >
-              <Download size={16} className="text-brand-600" />
-              {isExporting ? t('btnExporting') : t('btnExport')}
-            </button>
-            {showExportMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowExportMenu(false)}
-                />
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
-                  {[
-                    { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
-                    {
-                      icon: FileSpreadsheet,
-                      label: t('exportExcel'),
-                      fn: () => handleExport('excel'),
-                    },
-                    { icon: FileCode, label: t('exportXml'), fn: () => handleExport('xml') },
-                    { icon: FileCsv, label: t('exportDatev'), fn: () => handleExport('datev') },
-                  ].map((item) => (
-                    <button
-                      key={item.label}
-                      onClick={item.fn}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors text-left"
-                    >
-                      <item.icon size={16} className="text-brand-600" />
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          {canExport && (
+            <div className="relative z-50">
+              <button
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all border border-slate-200 shadow-xs"
+              >
+                <Download size={16} className="text-brand-600" />
+                {isExporting ? t('btnExporting') : t('btnExport')}
+              </button>
+              {showExportMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
+                    {[
+                      { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
+                      {
+                        icon: FileSpreadsheet,
+                        label: t('exportExcel'),
+                        fn: () => handleExport('excel'),
+                      },
+                      { icon: FileCode, label: t('exportXml'), fn: () => handleExport('xml') },
+                      { icon: FileCsv, label: t('exportDatev'), fn: () => handleExport('datev') },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        onClick={item.fn}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors text-left"
+                      >
+                        <item.icon size={16} className="text-brand-600" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,7 +268,7 @@ export default function CashBookPage() {
       </div>
 
       {/* No opening balance banner */}
-      {settings && !settings.openingBalance && canEdit && (
+      {settings && !settings.openingBalance && canManageSettings && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
           <div className="flex items-center gap-3 text-amber-900">
             <span className="text-2xl">💡</span>
@@ -294,7 +312,8 @@ export default function CashBookPage() {
         onDelete={setDeletingEntry}
         onViewDocument={setViewingDoc}
         onEditOpeningBalance={() => setShowOpeningBalance(true)}
-        canEdit={canModify}
+        canEdit={canEditEntry}
+        canDelete={canDeleteEntry}
       />
 
       {/* Modals */}

@@ -1,9 +1,52 @@
+export interface UserPermissions {
+  canAddIncome: boolean;
+  canAddExpense: boolean;
+  canEditEntry: boolean;
+  canDeleteEntry: boolean;
+  canExportReports: boolean;
+  canManageSettings: boolean;
+}
+
+export function getDefaultPermissions(role: string): UserPermissions {
+  switch (role) {
+    case 'admin':
+      return {
+        canAddIncome: true,
+        canAddExpense: true,
+        canEditEntry: true,
+        canDeleteEntry: true,
+        canExportReports: true,
+        canManageSettings: true,
+      };
+    case 'accountant':
+      return {
+        canAddIncome: true,
+        canAddExpense: true,
+        canEditEntry: true,
+        canDeleteEntry: true,
+        canExportReports: true,
+        canManageSettings: false,
+      };
+    case 'viewer':
+    default:
+      return {
+        canAddIncome: false,
+        canAddExpense: false,
+        canEditEntry: false,
+        canDeleteEntry: false,
+        canExportReports: true,
+        canManageSettings: false,
+      };
+  }
+}
+
 export interface User {
   _id: string;
   name: string;
   email: string;
   role: 'admin' | 'accountant' | 'viewer';
   isActive: boolean;
+  permissions?: UserPermissions;
 }
 
 export interface CashBookEntry {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { CashBookEntry } from '../models/CashBookEntry';
 import { Settings } from '../models/Settings';
+import { getDefaultPermissions } from '../models/User';
 import { authenticate } from '../middleware/auth';
 import { validateExpense, recalculateBalancesFrom, getCurrentBalance } from '../services/balanceService';
 import { logAction } from '../services/auditService';
@@ -48,6 +49,21 @@ router.get('/', async (req, res, next) => {
 router.post('/', upload.single('document'), async (req: any, res, next) => {
   try {
     const { date, voucherNo, bookingRule, bookingText, type, amount, vatPercentage } = req.body;
+
+    const userPermissions = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
+    if (type === 'income' && !userPermissions.canAddIncome) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Erfassen von Einnahmen. / Not permitted to add income.'
+      });
+    }
+    if (type === 'expense' && !userPermissions.canAddExpense) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Erfassen von Ausgaben. / Not permitted to add expenses.'
+      });
+    }
+
     const numAmount = Number(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Bitte einen gültigen Betrag größer als 0 eingeben / Please enter a valid amount greater than 0.' });
@@ -105,6 +121,14 @@ router.post('/', upload.single('document'), async (req: any, res, next) => {
 
 router.put('/:id', upload.single('document'), async (req: any, res, next) => {
   try {
+    const userPermissions = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
+    if (!userPermissions.canEditEntry) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Bearbeiten von Einträgen. / Not permitted to edit entries.'
+      });
+    }
+
     const entry = await CashBookEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Not found' });
 
@@ -158,6 +182,7 @@ router.put('/:id', upload.single('document'), async (req: any, res, next) => {
 
     await entry.save();
     await recalculateBalancesFrom(newDate < oldDate ? newDate : oldDate);
+
     await logAction({
       action: 'UPDATE',
       entityType: 'entry',
@@ -172,6 +197,14 @@ router.put('/:id', upload.single('document'), async (req: any, res, next) => {
 
 router.delete('/:id', async (req: any, res, next) => {
   try {
+    const userPermissions = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
+    if (!userPermissions.canDeleteEntry) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Löschen von Einträgen. / Not permitted to delete entries.'
+      });
+    }
+
     const entry = await CashBookEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Not found' });
 

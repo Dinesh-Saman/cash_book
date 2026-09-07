@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle, Cookie } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { settingsApi, bookingRulesApi } from '../lib/api';
-import type { Settings, BookingRule } from '../types';
+import { type Settings, type BookingRule, getDefaultPermissions } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { useCookieStore } from '../store/cookieStore';
 import { useTranslation } from '../store/languageStore';
@@ -40,8 +40,15 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'admin';
-  const canManageOpeningBalance = user?.role === 'admin' || user?.role === 'accountant';
+  const userPerms = user?.permissions
+    ? { ...getDefaultPermissions(user.role), ...user.permissions }
+    : user
+    ? getDefaultPermissions(user.role)
+    : null;
+
+  const canManageSettings = userPerms?.canManageSettings ?? (user?.role === 'admin');
+  const isAdmin = user?.role === 'admin' || canManageSettings;
+  const canManageOpeningBalance = userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant');
   const cookiePrefs = useCookieStore((s) => s.preferences);
   const openCookieModal = useCookieStore((s) => s.setModalOpen);
   const resetCookieConsent = useCookieStore((s) => s.resetConsent);
