@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Book, Eye, EyeOff, LogIn, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, AlertCircle, Mail, Lock, Sparkles } from 'lucide-react';
 import { authApi } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import LanguageToggle from '../components/ui/LanguageToggle';
-import CookieConsentBanner from '../components/cookie/CookieConsentBanner';
-import CookiePreferencesModal from '../components/cookie/CookiePreferencesModal';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -46,46 +44,76 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
-      style={{
-        background:
-          'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(124, 58, 237, 0.15), rgba(248, 250, 252, 0.95))',
-      }}
-    >
+    <div className="h-screen w-screen bg-slate-900 flex flex-col justify-center items-center px-4 sm:px-6 relative overflow-hidden select-none">
+      {/* Elegant Multi-layered Mesh Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-[#0f172a] to-[#1e1b4b] pointer-events-none" />
+      
+      {/* Ambient glowing radial orbs */}
+      <div className="absolute -top-32 -left-32 w-[550px] h-[550px] bg-indigo-600/25 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
+      <div className="absolute top-1/2 -right-32 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[130px] pointer-events-none animate-pulse" style={{ animationDuration: '10s' }} />
+      <div className="absolute -bottom-32 left-1/3 w-[450px] h-[450px] bg-blue-600/15 rounded-full blur-[110px] pointer-events-none" />
+
+      {/* Subtle background grid pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: `linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)`,
+          backgroundSize: '40px 40px',
+        }}
+      />
+
       {/* Top right language switcher */}
-      <div className="absolute top-6 right-6 z-20">
-        <LanguageToggle />
-      </div>
-
-      {/* Decorative ambient blur orbs */}
-      <div className="absolute top-10 left-1/4 w-72 h-72 bg-purple-400/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-brand-400/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Header & Logo */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl purple-blue-gradient text-white shadow-brand mb-4 animate-in fade-in zoom-in-90 duration-300">
-          <Book size={32} className="stroke-[2.5]" />
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30">
+        <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/60 rounded-xl p-0.5 shadow-lg">
+          <LanguageToggle />
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t('appName')}</h1>
-        <p className="mt-1 text-sm font-semibold text-brand-700">{t('appSubtitle')}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{t('appTagline')}</p>
       </div>
 
-      {/* Login Card */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="bg-white border border-slate-200/90 rounded-3xl shadow-card p-8 sm:p-10">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-slate-900">{t('loginTitle')}</h2>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <ShieldCheck size={13} />
-              {t('loginSslSecured')}
-            </span>
+      {/* Main Two-Column Card Container */}
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5),0_0_40px_rgba(99,102,241,0.15)] border border-slate-700/30 overflow-hidden relative z-10 grid grid-cols-1 md:grid-cols-2 max-h-[92vh]">
+        {/* Left Side: Visual Hero Image & Product Info */}
+        <div className="relative bg-gradient-to-br from-slate-950 via-[#111827] to-[#1e1b4b] text-white p-6 sm:p-8 flex flex-col justify-between overflow-hidden border-b md:border-b-0 md:border-r border-slate-800">
+          {/* Subtle inner background light */}
+          <div className="absolute -top-20 -left-20 w-60 h-60 bg-indigo-500/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Top Brand Info */}
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 text-[11px] font-semibold tracking-wide mb-2.5">
+              <Sparkles size={12} className="text-indigo-400" />
+              <span>Finanzbuchhaltung</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-sm">
+              {t('appName')}
+            </h1>
+            <p className="text-xs sm:text-sm font-semibold text-indigo-300 mt-0.5">
+              {t('appSubtitle')}
+            </p>
+          </div>
+
+          {/* Image Showcase - aligns with the text above */}
+          <div className="w-full flex-1 flex items-center pt-3 pb-1 relative z-10">
+            <div className="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/10 group">
+              <img
+                src="/login-illustration.jpg"
+                alt="Cash Book Finance Management"
+                className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Sign In Form */}
+        <div className="p-6 sm:p-8 md:p-10 flex flex-col justify-center bg-white overflow-y-auto">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('loginTitle')}</h2>
+            <p className="text-xs text-slate-500 mt-1 font-medium">Willkommen zurück • Welcome back</p>
           </div>
 
           {error && (
-            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in duration-150">
-              <AlertCircle size={17} className="text-rose-600 flex-shrink-0 mt-0.5" />
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in duration-150">
+              <AlertCircle size={16} className="text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1 leading-relaxed">{error}</div>
             </div>
           )}
@@ -95,25 +123,33 @@ export default function LoginPage() {
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 {t('loginEmailLabel')}
               </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (error) setError('');
-                }}
-                required
-                autoComplete="email"
-                placeholder="admin@cashbook.com"
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 placeholder-slate-400 shadow-xs transition-all"
-              />
+              <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600 transition-colors pointer-events-none">
+                  <Mail size={16} />
+                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError('');
+                  }}
+                  required
+                  autoComplete="email"
+                  placeholder="admin@cashbook.com"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-brand-600 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-brand-500/10 placeholder-slate-400 shadow-xs transition-all font-medium"
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 {t('loginPasswordLabel')}
               </label>
-              <div className="relative">
+              <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600 transition-colors pointer-events-none">
+                  <Lock size={16} />
+                </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
@@ -123,12 +159,13 @@ export default function LoginPage() {
                   }}
                   required
                   autoComplete="current-password"
-                  className="w-full px-4 py-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs transition-all font-medium"
+                  className="w-full pl-10 pr-11 py-2.5 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-brand-600 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-brand-500/10 shadow-xs transition-all font-medium tracking-wide"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1 transition-all"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -139,26 +176,15 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-brand transition-all duration-150"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:from-brand-700 hover:via-indigo-700 hover:to-purple-700 active:scale-[0.99] disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all duration-150 cursor-pointer"
               >
                 <LogIn size={17} />
                 {isLoading ? t('loginAuthenticating') : t('btnLogin')}
               </button>
             </div>
           </form>
-
-          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col items-center gap-1.5 text-center">
-            <p className="text-xs text-slate-500 font-medium">
-              {t('defaultAccess')} <span className="font-bold text-slate-700">admin@cashbook.com</span>
-            </p>
-            <p className="text-[11px] text-slate-400">{t('defaultPassword')}</p>
-          </div>
         </div>
       </div>
-
-      {/* Cookie Consent Banner & Preferences Modal */}
-      <CookieConsentBanner />
-      <CookiePreferencesModal />
     </div>
   );
 }
