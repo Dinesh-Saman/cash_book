@@ -160,27 +160,27 @@ export default function MonthlyReportPage() {
 
           {/* Date Range Start and End */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('lblFromDate')}:</span>
+            <div className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('lblFromDate')}:</span>
               <input
                 type="date"
                 value={startDate}
                 min={`${year}-${String(month).padStart(2, '0')}-01`}
                 max={endDate || `${year}-${String(month).padStart(2, '0')}-31`}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
               />
             </div>
 
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('lblToDate')}:</span>
+            <div className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('lblToDate')}:</span>
               <input
                 type="date"
                 value={endDate}
                 min={startDate || `${year}-${String(month).padStart(2, '0')}-01`}
                 max={`${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
               />
             </div>
 
@@ -188,7 +188,7 @@ export default function MonthlyReportPage() {
               <button
                 type="button"
                 onClick={resetToFullMonth}
-                className="px-3 py-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition-all shadow-2xs"
+                className="h-10 px-3.5 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition-all shadow-xs flex items-center justify-center"
               >
                 {t('btnFullMonth')}
               </button>
