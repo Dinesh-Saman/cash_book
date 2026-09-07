@@ -124,7 +124,11 @@ export const translations = {
     cardTotalExpense: 'Gesamtausgaben',
     cardMonthBalance: 'Monatssaldo',
     cardMonthEndBalance: 'Monats-Endbestand',
-    noMonthlyEntries: 'Keine Buchungen für diesen Monat gefunden',
+    noMonthlyEntries: 'Keine Buchungen für diesen Zeitraum gefunden',
+    lblFromDate: 'Von',
+    lblToDate: 'Bis',
+    lblDateRange: 'Datumsbereich',
+    btnFullMonth: 'Gesamter Monat',
 
     // Annual Report
     annualReportTitle: 'Jahresbericht',
@@ -358,7 +362,11 @@ export const translations = {
     cardTotalExpense: 'Total Expenses',
     cardMonthBalance: 'Net Balance',
     cardMonthEndBalance: 'Closing Balance',
-    noMonthlyEntries: 'No transactions found for this month',
+    noMonthlyEntries: 'No transactions found for this period',
+    lblFromDate: 'From',
+    lblToDate: 'To',
+    lblDateRange: 'Date Range',
+    btnFullMonth: 'Full Month',
 
     // Annual Report
     annualReportTitle: 'Annual Report',

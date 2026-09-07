@@ -8,23 +8,39 @@ router.use(authenticate);
 
 router.get('/monthly', async (req, res, next) => {
   try {
-    const { year, month } = req.query;
+    const { year, month, startDate, endDate } = req.query;
     const numYear = Number(year);
     const numMonth = Number(month);
 
     const firstDayOfMonth = new Date(numYear, numMonth - 1, 1);
     const settings = await Settings.findOne() || await Settings.create({ openingBalance: 0 });
 
-    // Prior entry before this month to get start balance
+    let filterStart = firstDayOfMonth;
+    let filterEnd = new Date(numYear, numMonth, 0, 23, 59, 59, 999);
+
+    if (startDate && typeof startDate === 'string' && startDate.trim()) {
+      filterStart = new Date(startDate);
+    }
+    if (endDate && typeof endDate === 'string' && endDate.trim()) {
+      filterEnd = new Date(endDate);
+      filterEnd.setHours(23, 59, 59, 999);
+    }
+
+    // Prior entry before filterStart to get start balance
     const priorEntry = await CashBookEntry.findOne({
-      date: { $lt: firstDayOfMonth },
+      date: { $lt: filterStart },
       isDeleted: false
     }).sort({ date: -1, createdAt: -1 });
 
     const startBalance = priorEntry ? priorEntry.cashBalance : settings.openingBalance;
 
+    const query: Record<string, unknown> = {
+      isDeleted: false,
+      date: { $gte: filterStart, $lte: filterEnd }
+    };
+
     const entries = await CashBookEntry
-      .find({ year: numYear, month: numMonth, isDeleted: false })
+      .find(query)
       .populate('bookingRule')
       .sort({ date: 1, createdAt: 1 });
 

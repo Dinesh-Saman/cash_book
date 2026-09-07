@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { reportsApi, exportsApi } from '../lib/api';
-import { formatDate } from '../lib/utils';
 import { useTranslation } from '../store/languageStore';
 import { translateBookingRuleName } from '../lib/i18n/translations';
 import CustomSelect from '../components/ui/CustomSelect';
@@ -21,12 +20,50 @@ const VAT_COLORS: Record<number, string> = {
 export default function MonthlyReportPage() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
+
+  // Helper to compute default month bounds
+  const getMonthDateBounds = (y: number, m: number) => {
+    const start = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return { start, end };
+  };
+
+  const initialBounds = getMonthDateBounds(CURRENT_YEAR, new Date().getMonth() + 1);
+  const [startDate, setStartDate] = useState(initialBounds.start);
+  const [endDate, setEndDate] = useState(initialBounds.end);
+
   const [entries, setEntries] = useState<CashBookEntry[]>([]);
   const [startBalance, setStartBalance] = useState(0);
   const [isFinalized, setIsFinalized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const { t, formatCurrency, getMonthName, language } = useTranslation();
+  const { t, formatCurrency, getMonthName, formatDate, language } = useTranslation();
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+    const bounds = getMonthDateBounds(newYear, month);
+    setStartDate(bounds.start);
+    setEndDate(bounds.end);
+  };
+
+  const handleMonthChange = (newMonth: number) => {
+    setMonth(newMonth);
+    const bounds = getMonthDateBounds(year, newMonth);
+    setStartDate(bounds.start);
+    setEndDate(bounds.end);
+  };
+
+  const resetToFullMonth = () => {
+    const bounds = getMonthDateBounds(year, month);
+    setStartDate(bounds.start);
+    setEndDate(bounds.end);
+  };
+
+  const isCustomRange = (() => {
+    const bounds = getMonthDateBounds(year, month);
+    return startDate !== bounds.start || endDate !== bounds.end;
+  })();
 
   const totalIncome = entries
     .filter((e) => e.type === 'income')
@@ -37,9 +74,10 @@ export default function MonthlyReportPage() {
   const endBalance = entries.length > 0 ? entries[entries.length - 1].cashBalance : startBalance;
 
   useEffect(() => {
+    if (!startDate || !endDate) return;
     setIsLoading(true);
     reportsApi
-      .monthly(year, month)
+      .monthly(year, month, startDate, endDate)
       .then((res) => {
         const d = res.data.data;
         setEntries(d?.entries || []);
@@ -51,15 +89,15 @@ export default function MonthlyReportPage() {
         setStartBalance(0);
       })
       .finally(() => setIsLoading(false));
-  }, [year, month]);
+  }, [year, month, startDate, endDate]);
 
   const handleExport = async (type: 'pdf' | 'excel' | 'xml' | 'datev') => {
     setIsExporting(true);
     try {
-      if (type === 'pdf') await exportsApi.downloadPDF(year, month);
-      else if (type === 'excel') await exportsApi.downloadExcel(year, month);
-      else if (type === 'xml') await exportsApi.downloadXML(year, month);
-      else await exportsApi.downloadDatev(year, month);
+      if (type === 'pdf') await exportsApi.downloadPDF(year, month, language, startDate, endDate);
+      else if (type === 'excel') await exportsApi.downloadExcel(year, month, language, startDate, endDate);
+      else if (type === 'xml') await exportsApi.downloadXML(year, month, language, startDate, endDate);
+      else await exportsApi.downloadDatev(year, month, language, startDate, endDate);
       toast.success(t('btnExport'));
     } catch {
       toast.error('Fehler beim Exportieren / Export error');
@@ -77,7 +115,9 @@ export default function MonthlyReportPage() {
             {t('monthlyReportTitle')}
           </h1>
           <p className="text-slate-500 text-sm mt-0.5 font-medium">
-            {getMonthName(month)} {year}
+            {isCustomRange && startDate && endDate
+              ? `${formatDate(startDate)} – ${formatDate(endDate)} (${getMonthName(month)} ${year})`
+              : `${getMonthName(month)} ${year}`}
           </p>
         </div>
         <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
@@ -100,20 +140,67 @@ export default function MonthlyReportPage() {
         </div>
       </div>
 
-      {/* Period Selector Card */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <CustomSelect
-          value={year}
-          onChange={(val) => setYear(Number(val))}
-          options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-          className="w-full sm:w-36"
-        />
-        <CustomSelect
-          value={month}
-          onChange={(val) => setMonth(Number(val))}
-          options={MONTH_INDICES.map((m) => ({ value: m, label: getMonthName(m) }))}
-          className="w-full sm:w-44"
-        />
+      {/* Period & Date Range Selector Card */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <CustomSelect
+            value={year}
+            onChange={(val) => handleYearChange(Number(val))}
+            options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+            className="w-28 sm:w-32"
+          />
+          <CustomSelect
+            value={month}
+            onChange={(val) => handleMonthChange(Number(val))}
+            options={MONTH_INDICES.map((m) => ({ value: m, label: getMonthName(m) }))}
+            className="w-36 sm:w-44"
+          />
+
+          <div className="hidden lg:block h-6 w-px bg-slate-200 mx-1" />
+
+          {/* Date Range Start and End */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('lblFromDate')}:</span>
+              <input
+                type="date"
+                value={startDate}
+                min={`${year}-${String(month).padStart(2, '0')}-01`}
+                max={endDate || `${year}-${String(month).padStart(2, '0')}-31`}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl shadow-2xs">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('lblToDate')}:</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || `${year}-${String(month).padStart(2, '0')}-01`}
+                max={`${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            {isCustomRange && (
+              <button
+                type="button"
+                onClick={resetToFullMonth}
+                className="px-3 py-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition-all shadow-2xs"
+              >
+                {t('btnFullMonth')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="text-xs font-semibold text-slate-500">
+          {isCustomRange
+            ? `${startDate ? formatDate(startDate) : ''} – ${endDate ? formatDate(endDate) : ''}`
+            : `${getMonthName(month)} ${year}`}
+        </div>
       </div>
 
       {/* Finalized Banner */}

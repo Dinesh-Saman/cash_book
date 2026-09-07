@@ -75,8 +75,8 @@ export const settingsApi = {
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 export const reportsApi = {
-  monthly: (year: number, month: number) =>
-    api.get('/reports/monthly', { params: { year, month } }),
+  monthly: (year: number, month: number, startDate?: string, endDate?: string) =>
+    api.get('/reports/monthly', { params: { year, month, startDate, endDate } }),
   annual: (year: number) =>
     api.get('/reports/annual', { params: { year } }),
   getMonths: () =>
@@ -97,21 +97,21 @@ const downloadFile = async (url: string, filename: string, params?: Record<strin
 };
 
 export const exportsApi = {
-  downloadPDF: (year?: number, month?: number, lang?: string) => {
+  downloadPDF: (year?: number, month?: number, lang?: string, startDate?: string, endDate?: string) => {
     const currentLang = lang || localStorage.getItem('app_lang') || 'de';
-    return downloadFile('/exports/pdf', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.pdf`, { year, month, lang: currentLang });
+    return downloadFile('/exports/pdf', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.pdf`, { year, month, lang: currentLang, startDate, endDate });
   },
-  downloadExcel: (year?: number, month?: number, lang?: string) => {
+  downloadExcel: (year?: number, month?: number, lang?: string, startDate?: string, endDate?: string) => {
     const currentLang = lang || localStorage.getItem('app_lang') || 'de';
-    return downloadFile('/exports/excel', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.xlsx`, { year, month, lang: currentLang });
+    return downloadFile('/exports/excel', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.xlsx`, { year, month, lang: currentLang, startDate, endDate });
   },
-  downloadXML: (year?: number, month?: number, lang?: string) => {
+  downloadXML: (year?: number, month?: number, lang?: string, startDate?: string, endDate?: string) => {
     const currentLang = lang || localStorage.getItem('app_lang') || 'de';
-    return downloadFile('/exports/xml', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.xml`, { year, month, lang: currentLang });
+    return downloadFile('/exports/xml', `Kassenbuch_${year ?? 'gesamt'}_${month ?? ''}.xml`, { year, month, lang: currentLang, startDate, endDate });
   },
-  downloadDatev: (year?: number, month?: number, lang?: string) => {
+  downloadDatev: (year?: number, month?: number, lang?: string, startDate?: string, endDate?: string) => {
     const currentLang = lang || localStorage.getItem('app_lang') || 'de';
-    return downloadFile('/exports/datev', `EXTF_Kassenbuch_${year ?? 'gesamt'}.csv`, { year, month, lang: currentLang });
+    return downloadFile('/exports/datev', `EXTF_Kassenbuch_${year ?? 'gesamt'}.csv`, { year, month, lang: currentLang, startDate, endDate });
   },
 };
 
