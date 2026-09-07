@@ -1,11 +1,23 @@
 import { Router } from 'express';
 import { CashBookEntry } from '../models/CashBookEntry';
 import { Settings } from '../models/Settings';
+import { getDefaultPermissions } from '../models/User';
 import { authenticate } from '../middleware/auth';
 import { exportToPDF, exportToExcel, exportToXML, exportToDatev } from '../services/exportService';
 
 const router = Router();
 router.use(authenticate);
+
+router.use((req: any, res, next) => {
+  const userPerms = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
+  if (req.user?.role !== 'admin' && !userPerms.canExportReports) {
+    return res.status(403).json({
+      success: false,
+      message: 'Keine Berechtigung für Berichts-Exporte. / Not permitted to export reports.'
+    });
+  }
+  next();
+});
 
 async function getEntriesAndSettings(year?: string, month?: string, startDate?: string, endDate?: string) {
   const query: Record<string, unknown> = { isDeleted: false };

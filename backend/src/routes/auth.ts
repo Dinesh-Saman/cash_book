@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/User';
+import { User, getDefaultPermissions } from '../models/User';
 import { authenticate, authorize } from '../middleware/auth';
 import { logAction } from '../services/auditService';
 
@@ -40,6 +40,14 @@ router.post('/login', async (req, res, next) => {
       performedBy: user._id.toString() as any
     });
 
+    const userPerms = (user.permissions && typeof (user.permissions as any).toObject === 'function')
+      ? (user.permissions as any).toObject()
+      : (user.permissions || {});
+    const permissions = {
+      ...getDefaultPermissions(user.role),
+      ...userPerms,
+    };
+
     res.json({
       success: true,
       data: {
@@ -49,7 +57,8 @@ router.post('/login', async (req, res, next) => {
           name: user.name,
           email: user.email,
           role: user.role,
-          isActive: user.isActive
+          isActive: user.isActive,
+          permissions
         }
       }
     });
@@ -58,8 +67,12 @@ router.post('/login', async (req, res, next) => {
 
 router.post('/register', authenticate, authorize('admin'), async (req: any, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
-    const user = await User.create({ name, email, password, role });
+    const { name, email, password, role, permissions } = req.body;
+    const assignedPermissions = {
+      ...getDefaultPermissions(role || 'viewer'),
+      ...(permissions || {}),
+    };
+    const user = await User.create({ name, email, password, role, permissions: assignedPermissions });
     await logAction({
       action: 'CREATE',
       entityType: 'user',
@@ -72,7 +85,13 @@ router.post('/register', authenticate, authorize('admin'), async (req: any, res,
 });
 
 router.get('/me', authenticate, (req: any, res) => {
-  res.json({ success: true, data: req.user });
+  const userObj = req.user.toObject ? req.user.toObject() : { ...req.user };
+  delete userObj.password;
+  userObj.permissions = {
+    ...getDefaultPermissions(userObj.role),
+    ...(userObj.permissions || {}),
+  };
+  res.json({ success: true, data: userObj });
 });
 
 router.post('/logout', (req, res) => {

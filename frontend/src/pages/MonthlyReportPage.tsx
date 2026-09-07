@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { reportsApi, exportsApi } from '../lib/api';
 import { useTranslation } from '../store/languageStore';
 import { translateBookingRuleName } from '../lib/i18n/translations';
@@ -18,6 +18,8 @@ const VAT_COLORS: Record<number, string> = {
 };
 
 export default function MonthlyReportPage() {
+  const fromDateRef = useRef<HTMLInputElement>(null);
+  const toDateRef = useRef<HTMLInputElement>(null);
   const [year, setYear] = useState(CURRENT_YEAR);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
 
@@ -160,26 +162,56 @@ export default function MonthlyReportPage() {
 
           {/* Date Range Start and End */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('lblFromDate')}:</span>
+            <div
+              onClick={(e) => {
+                if (e.target !== fromDateRef.current) {
+                  try {
+                    fromDateRef.current?.showPicker?.();
+                  } catch {}
+                }
+              }}
+              className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer"
+            >
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none">{t('lblFromDate')}:</span>
               <input
+                ref={fromDateRef}
                 type="date"
                 value={startDate}
                 min={`${year}-${String(month).padStart(2, '0')}-01`}
                 max={endDate || `${year}-${String(month).padStart(2, '0')}-31`}
                 onChange={(e) => setStartDate(e.target.value)}
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker?.();
+                  } catch {}
+                }}
                 className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
               />
             </div>
 
-            <div className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('lblToDate')}:</span>
+            <div
+              onClick={(e) => {
+                if (e.target !== toDateRef.current) {
+                  try {
+                    toDateRef.current?.showPicker?.();
+                  } catch {}
+                }
+              }}
+              className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer"
+            >
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none">{t('lblToDate')}:</span>
               <input
+                ref={toDateRef}
                 type="date"
                 value={endDate}
                 min={startDate || `${year}-${String(month).padStart(2, '0')}-01`}
                 max={`${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()}`}
                 onChange={(e) => setEndDate(e.target.value)}
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker?.();
+                  } catch {}
+                }}
                 className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
               />
             </div>
