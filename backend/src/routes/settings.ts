@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Settings } from '../models/Settings';
 import { authenticate, authorize } from '../middleware/auth';
+import { getDefaultPermissions } from '../models/User';
 import { recalculateBalancesFrom } from '../services/balanceService';
 import { logAction } from '../services/auditService';
 
@@ -15,8 +16,15 @@ router.get('/', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.put('/', authorize('admin', 'accountant'), async (req: any, res, next) => {
+router.put('/', async (req: any, res, next) => {
   try {
+    const userPerms = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
+    if (req.user?.role !== 'admin' && !userPerms.canManageSettings) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Verwalten der Einstellungen. / Not permitted to manage settings.'
+      });
+    }
     let settings = await Settings.findOne();
     if (!settings) settings = await Settings.create({ finalizedYears: [] });
 

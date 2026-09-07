@@ -13,6 +13,7 @@ interface Props {
   onViewDocument: (entry: CashBookEntry) => void;
   onEditOpeningBalance?: () => void;
   canEdit: boolean;
+  canDelete?: boolean;
 }
 
 function SkeletonRow() {
@@ -42,6 +43,7 @@ export default function CashBookTable({
   onViewDocument,
   onEditOpeningBalance,
   canEdit,
+  canDelete = canEdit,
 }: Props) {
   const { t, formatCurrency, formatDate, language } = useTranslation();
 
@@ -217,22 +219,26 @@ export default function CashBookTable({
 
                 {/* Actions */}
                 <td className="px-4 py-3.5">
-                  {canEdit && (
+                  {(canEdit || canDelete) && (
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => onEdit(entry)}
-                        className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                        title={t('btnEdit')}
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                      <button
-                        onClick={() => onDelete(entry)}
-                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title={t('btnDelete')}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => onEdit(entry)}
+                          className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                          title={t('btnEdit')}
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => onDelete(entry)}
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title={t('btnDelete')}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>

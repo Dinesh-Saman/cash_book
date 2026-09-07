@@ -23,6 +23,7 @@ import { useTranslation } from '../../store/languageStore';
 import LanguageToggle from '../ui/LanguageToggle';
 import { cn } from '../../lib/utils';
 import { useEffect } from 'react';
+import { getDefaultPermissions } from '../../types';
 
 export default function Sidebar() {
   const user = useAuthStore((state) => state.user);
@@ -36,7 +37,15 @@ export default function Sidebar() {
   const { t, language, formatCurrency } = useTranslation();
   const location = useLocation();
 
-  const canModify = user?.role === 'admin' || user?.role === 'accountant';
+  const userPerms = user?.permissions
+    ? { ...getDefaultPermissions(user.role), ...user.permissions }
+    : user
+    ? getDefaultPermissions(user.role)
+    : null;
+
+  const canAddIncome = userPerms?.canAddIncome ?? (user?.role === 'admin' || user?.role === 'accountant');
+  const canAddExpense = userPerms?.canAddExpense ?? (user?.role === 'admin' || user?.role === 'accountant');
+  const hasQuickActions = canAddIncome || canAddExpense;
 
   // Auto-close sidebar on mobile route change
   useEffect(() => {
@@ -123,34 +132,38 @@ export default function Sidebar() {
           </div>
 
           {/* Quick Transaction Actions (Mobile & Compact) */}
-          {canModify && (
+          {hasQuickActions && (
             <div>
               <p className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 {language === 'de' ? 'Schnellbuchung' : 'Quick Actions'}
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSidebarOpen(false);
-                    openIncomeForm();
-                  }}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
-                >
-                  <PlusCircle size={14} />
-                  <span>{t('btnAddIncome')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSidebarOpen(false);
-                    openExpenseForm();
-                  }}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
-                >
-                  <MinusCircle size={14} />
-                  <span>{t('btnAddExpense')}</span>
-                </button>
+              <div className={`grid ${canAddIncome && canAddExpense ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                {canAddIncome && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      openIncomeForm();
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                  >
+                    <PlusCircle size={14} />
+                    <span>{t('btnAddIncome')}</span>
+                  </button>
+                )}
+                {canAddExpense && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      openExpenseForm();
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                  >
+                    <MinusCircle size={14} />
+                    <span>{t('btnAddExpense')}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
