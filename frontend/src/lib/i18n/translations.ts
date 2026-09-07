@@ -227,6 +227,27 @@ export const translations = {
     defaultPassword: 'Passwort: Admin@1234',
     accountDisabled: 'Ihr Benutzerkonto wurde von einem Administrator deaktiviert. Bitte wenden Sie sich an die Administration.',
 
+    // Cookie & Privacy
+    cookieBannerTitle: 'Cookie- & Datenschutzeinstellungen',
+    cookieBannerDesc: 'Wir verwenden Cookies, um die grundlegende Funktionalität des Kassenbuchs (z. B. Authentifizierung, Sitzungssicherheit, GoBD-Konformität und Spracheinstellungen) sicherzustellen. Optionale Cookies helfen uns, Komfort und Leistung zu verbessern.',
+    cookieBtnAcceptAll: 'Alle akzeptieren',
+    cookieBtnEssentialOnly: 'Nur Notwendige',
+    cookieBtnCustomize: 'Einstellungen anpassen',
+    cookieModalTitle: 'Cookie-Einstellungen verwalten',
+    cookieModalSubtitle: 'Transparente Kontrolle über Ihre Daten & Speicherfristen',
+    cookieSecNecessaryTitle: 'Technisch Notwendige Cookies (Erforderlich)',
+    cookieSecNecessaryDesc: 'Diese Cookies und lokalen Speicherobjekte sind für den sicheren Betrieb der Kassenbuch-Anwendung unverzichtbar (z. B. JWT-Sitzung, Benutzeranmeldung, CSRF-Schutz und GoBD-konforme Auditprotokolle). Sie können nicht deaktiviert werden.',
+    cookieSecFunctionalTitle: 'Funktionale Cookies & Präferenzen',
+    cookieSecFunctionalDesc: 'Ermöglichen erweiterte Funktionen und Personalisierungen, wie das Speichern von Tabellenfiltern, Layout-Einstellungen und Schnellzugriffen.',
+    cookieSecAnalyticsTitle: 'Analyse- & Performance-Cookies',
+    cookieSecAnalyticsDesc: 'Helfen uns, die Geschwindigkeit und Ladezeiten von Berichten sowie API-Antwortzeiten anonym zu messen und das System kontinuierlich zu optimieren.',
+    cookieAlwaysActive: 'Immer aktiv',
+    cookieBtnSavePreferences: 'Einstellungen speichern',
+    cookieSavedToast: 'Cookie-Einstellungen erfolgreich gespeichert',
+    cookieResetConsent: 'Cookie-Einwilligung zurücksetzen',
+    secCookieSettings: 'Cookie- & Datenschutzeinstellungen',
+    cookieSettingsDesc: 'Hier können Sie jederzeit einsehen und anpassen, welche Cookie-Kategorien im Browser aktiv sind.',
+
     // Months (Full)
     months: [
       'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -464,6 +485,27 @@ export const translations = {
     defaultAccess: 'Default Admin:',
     defaultPassword: 'Password: Admin@1234',
     accountDisabled: 'Your account has been disabled by an administrator. Please contact your administrator.',
+
+    // Cookie & Privacy
+    cookieBannerTitle: 'Cookie & Privacy Settings',
+    cookieBannerDesc: 'We use cookies to ensure core functionality of the Cash Book system (e.g. authentication sessions, security, GoBD compliance, and language preferences). Optional cookies help us enhance user convenience and performance.',
+    cookieBtnAcceptAll: 'Accept All',
+    cookieBtnEssentialOnly: 'Essential Only',
+    cookieBtnCustomize: 'Customize Settings',
+    cookieModalTitle: 'Manage Cookie Preferences',
+    cookieModalSubtitle: 'Transparent control over your data and browser storage',
+    cookieSecNecessaryTitle: 'Strictly Necessary Cookies (Required)',
+    cookieSecNecessaryDesc: 'These cookies and local storage tokens are essential for secure operation of the cash book (e.g. JWT login session, user authorization, and GoBD audit logging). They cannot be disabled.',
+    cookieSecFunctionalTitle: 'Functional Cookies & Preferences',
+    cookieSecFunctionalDesc: 'Enable enhanced features and personalization, such as remembering table filters, layout states, and quick-action preferences.',
+    cookieSecAnalyticsTitle: 'Analytics & Performance Cookies',
+    cookieSecAnalyticsDesc: 'Help us measure report generation speeds and API response times anonymously to continuously improve performance.',
+    cookieAlwaysActive: 'Always Active',
+    cookieBtnSavePreferences: 'Save Preferences',
+    cookieSavedToast: 'Cookie preferences saved successfully',
+    cookieResetConsent: 'Reset Cookie Consent',
+    secCookieSettings: 'Cookie & Privacy Settings',
+    cookieSettingsDesc: 'You can review and customize active cookie categories stored in your browser at any time.',
 
     // Months (Full)
     months: [

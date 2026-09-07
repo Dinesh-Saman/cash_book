@@ -13,10 +13,12 @@ import {
   MinusCircle,
   Wallet,
   CheckCircle2,
+  Cookie,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import { useCashbookStore } from '../../store/cashbookStore';
+import { useCookieStore } from '../../store/cookieStore';
 import { useTranslation } from '../../store/languageStore';
 import LanguageToggle from '../ui/LanguageToggle';
 import { cn } from '../../lib/utils';
@@ -29,6 +31,7 @@ export default function Sidebar() {
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
   const openIncomeForm = useUIStore((state) => state.openIncomeForm);
   const openExpenseForm = useUIStore((state) => state.openExpenseForm);
+  const openCookieModal = useCookieStore((state) => state.setModalOpen);
   const summary = useCashbookStore((state) => state.summary);
   const { t, language, formatCurrency } = useTranslation();
   const location = useLocation();
@@ -230,6 +233,21 @@ export default function Sidebar() {
           <div className="flex items-center justify-between px-1">
             <span className="text-[11px] font-semibold text-slate-500">{t('lblLanguage')}</span>
             <LanguageToggle />
+          </div>
+
+          {/* Cookie Preferences Link */}
+          <div className="flex items-center justify-between px-1 pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSidebarOpen(false);
+                openCookieModal(true);
+              }}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-brand-600 transition-colors"
+            >
+              <Cookie size={13} className="text-brand-600" />
+              <span>{t('cookieModalTitle')}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200/80 shadow-xs">

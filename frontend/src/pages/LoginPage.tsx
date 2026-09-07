@@ -5,6 +5,8 @@ import { authApi } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import LanguageToggle from '../components/ui/LanguageToggle';
+import CookieConsentBanner from '../components/cookie/CookieConsentBanner';
+import CookiePreferencesModal from '../components/cookie/CookiePreferencesModal';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -153,6 +155,10 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Cookie Consent Banner & Preferences Modal */}
+      <CookieConsentBanner />
+      <CookiePreferencesModal />
     </div>
   );
 }

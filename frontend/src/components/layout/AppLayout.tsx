@@ -5,6 +5,8 @@ import { Menu, Book } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useTranslation } from '../../store/languageStore';
 import LanguageToggle from '../ui/LanguageToggle';
+import CookieConsentBanner from '../cookie/CookieConsentBanner';
+import CookiePreferencesModal from '../cookie/CookiePreferencesModal';
 
 export default function AppLayout() {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
@@ -47,6 +49,10 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+
+      {/* Cookie Consent Banner & Preferences Modal */}
+      <CookieConsentBanner />
+      <CookiePreferencesModal />
     </div>
   );
 }
