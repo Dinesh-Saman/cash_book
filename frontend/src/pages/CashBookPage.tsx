@@ -110,7 +110,7 @@ export default function CashBookPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-30">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -166,7 +166,7 @@ export default function CashBookPage() {
           ) : null}
 
           {/* Export Dropdown */}
-          <div className="relative">
+          <div className="relative z-50">
             <button
               onClick={() => setShowExportMenu((prev) => !prev)}
               disabled={isExporting}
@@ -178,10 +178,10 @@ export default function CashBookPage() {
             {showExportMenu && (
               <>
                 <div
-                  className="fixed inset-0 z-10"
+                  className="fixed inset-0 z-40"
                   onClick={() => setShowExportMenu(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-20 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
                   {[
                     { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
                     {
@@ -209,8 +209,8 @@ export default function CashBookPage() {
       </div>
 
       {/* Period Filter Card */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2.5 relative z-20">
-        <div className="flex-shrink-0 relative z-30">
+      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2.5 relative z-10">
+        <div className="flex-shrink-0 relative z-10">
           <CustomSelect
             value={selectedYear}
             onChange={(val) => setSelectedPeriod(Number(val), selectedMonth)}
