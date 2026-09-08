@@ -200,6 +200,20 @@ export default function AuditLogPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const visiblePages = (() => {
+    const maxButtons = 5;
+    if (totalPages <= maxButtons) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    let start = Math.max(1, page - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  })();
+
   const fetchLogs = useCallback(() => {
     setIsLoading(true);
     auditApi
@@ -246,7 +260,8 @@ export default function AuditLogPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
-        <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[640px]">
           <thead>
             <tr className="bg-slate-50/90 border-b border-slate-200">
               {[
@@ -331,45 +346,44 @@ export default function AuditLogPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-sm font-semibold text-slate-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 bg-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl border border-slate-200 shadow-xs">
+          <p className="text-xs sm:text-sm font-semibold text-slate-600 text-center sm:text-left">
             {t('pageOf', { page, total: totalPages })} — {total} {t('totalActions')}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-1 sm:gap-1.5 flex-wrap">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-brand-600 hover:border-brand-300 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-xs"
+              aria-label="Previous page"
+              className="p-1.5 sm:p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-brand-600 hover:border-brand-300 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-xs flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-8 sm:h-9"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const pg = page <= 3 ? i + 1 : page - 2 + i;
-              if (pg < 1 || pg > totalPages) return null;
-              return (
-                <button
-                  key={pg}
-                  onClick={() => setPage(pg)}
-                  className={`w-9 h-9 rounded-xl text-sm font-bold transition-all ${
-                    pg === page
-                      ? 'bg-brand-600 text-white shadow-brand'
-                      : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-300 hover:text-brand-600'
-                  }`}
-                >
-                  {pg}
-                </button>
-              );
-            })}
+            {visiblePages.map((pg) => (
+              <button
+                key={pg}
+                onClick={() => setPage(pg)}
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center ${
+                  pg === page
+                    ? 'bg-brand-600 text-white shadow-brand'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-300 hover:text-brand-600'
+                }`}
+              >
+                {pg}
+              </button>
+            ))}
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-brand-600 hover:border-brand-300 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-xs"
+              aria-label="Next page"
+              className="p-1.5 sm:p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-brand-600 hover:border-brand-300 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-xs flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-8 sm:h-9"
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
             </button>
           </div>
         </div>
