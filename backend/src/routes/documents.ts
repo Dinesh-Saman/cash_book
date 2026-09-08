@@ -1,53 +1,47 @@
 import { Router } from 'express';
 import path from 'path';
-import fs from 'fs';
-import { CashBookEntry } from '../models/CashBookEntry';
+import { getDocumentStream } from '../services/documentStorage';
 
 const router = Router();
 
-const MIME_MAP: Record<string, string> = {
-  pdf: 'application/pdf',
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-};
-
 export async function serveDocument(req: any, res: any) {
   try {
-    const filename = req.params.filename;
+    const rawFilename = req.params.filename || req.params[0] || (req.path ? path.basename(req.path) : '');
+    const filename = rawFilename ? path.basename(rawFilename) : '';
     if (!filename) {
       return res.status(400).json({ success: false, message: 'Filename required' });
     }
 
-    const safeFilename = path.basename(filename);
-    let filePath = path.join(process.cwd(), 'uploads', safeFilename);
-    if (!fs.existsSync(filePath)) {
-      filePath = path.join(require('os').tmpdir(), 'uploads', safeFilename);
-    }
-
-    if (!fs.existsSync(filePath)) {
+    const doc = await getDocumentStream(filename);
+    if (!doc) {
       return res.status(404).json({ success: false, message: 'Document not found' });
     }
-
-    // Lookup original filename to determine proper MIME type and download name
-    const entry = await CashBookEntry.findOne({ documentPath: safeFilename });
-    const originalName = entry?.documentOriginalName || safeFilename;
-    const ext = originalName.split('.').pop()?.toLowerCase() || '';
-    const contentType = MIME_MAP[ext] || 'application/octet-stream';
 
     const isDownload = req.query.download === 'true' || req.query.download === '1';
     const dispositionType = isDownload ? 'attachment' : 'inline';
 
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', doc.contentType);
     res.setHeader(
       'Content-Disposition',
-      `${dispositionType}; filename="${encodeURIComponent(originalName)}"`
+      `${dispositionType}; filename="${encodeURIComponent(doc.originalName)}"`
     );
+    if (doc.length) {
+      res.setHeader('Content-Length', doc.length);
+    }
 
-    const stream = fs.createReadStream(filePath);
-    stream.pipe(res);
+    doc.stream.on('error', (err: any) => {
+      console.error('Error streaming document:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Error streaming document' });
+      }
+    });
+
+    doc.stream.pipe(res);
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to serve document' });
+    console.error('Failed to serve document:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Failed to serve document' });
+    }
   }
 }
 

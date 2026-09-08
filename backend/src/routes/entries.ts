@@ -7,12 +7,12 @@ import { authenticate } from '../middleware/auth';
 import { validateExpense, recalculateBalancesFrom, getCurrentBalance } from '../services/balanceService';
 import { logAction } from '../services/auditService';
 
-import os from 'os';
+import crypto from 'crypto';
 import path from 'path';
+import { saveDocumentToGridFS } from '../services/documentStorage';
 
-const uploadDir = process.env.VERCEL ? path.join(os.tmpdir(), 'uploads') : 'uploads/';
 const upload = multer({
-  dest: uploadDir,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
@@ -94,6 +94,21 @@ router.post('/', upload.single('document'), async (req: any, res, next) => {
       }
     }
 
+    let documentPath: string | undefined;
+    let documentOriginalName: string | undefined;
+    if (req.file) {
+      const ext = path.extname(req.file.originalname) || '';
+      const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
+      await saveDocumentToGridFS(
+        generatedFilename,
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname
+      );
+      documentPath = generatedFilename;
+      documentOriginalName = req.file.originalname;
+    }
+
     const entry = await CashBookEntry.create({
       date: entryDate,
       voucherNo: voucherNo || '',
@@ -105,8 +120,8 @@ router.post('/', upload.single('document'), async (req: any, res, next) => {
       cashBalance: 0,
       year: entryYear,
       month: entryDate.getMonth() + 1,
-      documentPath: req.file?.filename,
-      documentOriginalName: req.file?.originalname,
+      documentPath,
+      documentOriginalName,
       createdBy: req.user._id
     });
 
@@ -180,7 +195,15 @@ router.put('/:id', upload.single('document'), async (req: any, res, next) => {
     });
 
     if (req.file) {
-      entry.documentPath = req.file.filename;
+      const ext = path.extname(req.file.originalname) || '';
+      const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
+      await saveDocumentToGridFS(
+        generatedFilename,
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname
+      );
+      entry.documentPath = generatedFilename;
       entry.documentOriginalName = req.file.originalname;
     }
 
