@@ -13,6 +13,8 @@ import usersRoutes from './routes/users';
 import auditRoutes from './routes/audit';
 import documentsRoutes from './routes/documents';
 
+import { connectDB } from './db';
+
 const app = express();
 
 app.use(cors({
@@ -24,6 +26,16 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Ensure MongoDB is connected before handling any API request (Serverless support)
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/entries', entriesRoutes);
