@@ -83,11 +83,13 @@ export default function CashBookTable({
   const availableWidth = containerWidth > 0
     ? containerWidth
     : typeof window !== 'undefined'
-    ? Math.max(300, window.innerWidth - 26)
-    : 360;
+    ? Math.max(300, window.innerWidth - 32)
+    : 340;
 
-  const colDateWidth = Math.max(82, Math.round(availableWidth * 0.28));
-  const remainingWidth = Math.max(160, availableWidth - colDateWidth);
+  // Reserve a 6px safety buffer so the 3 columns fit inside the card without clipping
+  const contentWidth = availableWidth - 6;
+  const colDateWidth = Math.max(76, Math.round(contentWidth * 0.27));
+  const remainingWidth = Math.max(160, contentWidth - colDateWidth);
   const colIncomeWidth = Math.floor(remainingWidth / 2);
   const colExpenseWidth = remainingWidth - colIncomeWidth;
 
@@ -327,19 +329,19 @@ export default function CashBookTable({
               <tr className="bg-amber-50/50 hover:bg-amber-50 transition-colors">
                 <td
                   style={{ width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }}
-                  className="px-2.5 py-3 text-slate-600 text-xs font-medium whitespace-nowrap"
+                  className="pl-3.5 pr-2 py-3 text-slate-600 text-xs font-medium whitespace-nowrap"
                 >
                   {settings.openingBalanceDate ? formatDate(settings.openingBalanceDate) : '—'}
                 </td>
                 <td
                   style={{ width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }}
-                  className="px-2.5 py-3 text-right font-bold text-amber-700 whitespace-nowrap text-xs"
+                  className="px-2 py-3 text-right font-bold text-amber-700 whitespace-nowrap text-xs"
                 >
                   {formatCurrency(settings.openingBalance)}
                 </td>
                 <td
                   style={{ width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }}
-                  className="px-2.5 py-3 text-right text-slate-400 whitespace-nowrap text-xs"
+                  className="pl-2 pr-4 py-3 text-right text-slate-400 whitespace-nowrap text-xs"
                 >
                   —
                 </td>
@@ -350,7 +352,7 @@ export default function CashBookTable({
                 </td>
                 <td className="px-3.5 py-3 text-slate-400 text-xs">—</td>
                 <td className="px-3.5 py-3 text-center text-slate-400">—</td>
-                <td className="px-3.5 py-3 text-right">
+                <td style={{ minWidth: 95, width: 95 }} className="pl-2 pr-4 py-3 text-right">
                   {canEdit && onEditOpeningBalance && (
                     <button
                       onClick={onEditOpeningBalance}
@@ -382,7 +384,7 @@ export default function CashBookTable({
                   {/* 1. Date */}
                   <td
                     style={{ width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }}
-                    className="px-2.5 py-3 text-slate-800 font-medium whitespace-nowrap text-xs"
+                    className="pl-3.5 pr-2 py-3 text-slate-800 font-medium whitespace-nowrap text-xs"
                   >
                     {formatDate(entry.date)}
                   </td>
@@ -390,7 +392,7 @@ export default function CashBookTable({
                   {/* 2. Income */}
                   <td
                     style={{ width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }}
-                    className="px-2.5 py-3 text-right whitespace-nowrap"
+                    className="px-2 py-3 text-right whitespace-nowrap"
                   >
                     {entry.type === 'income' ? (
                       <span className="font-bold text-emerald-600 whitespace-nowrap text-xs">
@@ -401,10 +403,10 @@ export default function CashBookTable({
                     )}
                   </td>
 
-                  {/* 3. Expense (no vertical line after expense) */}
+                  {/* 3. Expense (properly visible with right padding) */}
                   <td
                     style={{ width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }}
-                    className="px-2.5 py-3 text-right whitespace-nowrap"
+                    className="pl-2 pr-4 py-3 text-right whitespace-nowrap"
                   >
                     {entry.type === 'expense' ? (
                       <span className="font-bold text-rose-600 whitespace-nowrap text-xs">
@@ -497,8 +499,8 @@ export default function CashBookTable({
 
                   {/* 10. Actions */}
                   <td
-                    style={{ minWidth: 70, width: 70 }}
-                    className="px-2 py-3 text-center"
+                    style={{ minWidth: 95, width: 95 }}
+                    className="pl-2 pr-4 py-3 text-center"
                   >
                     {(canEdit || canDelete) && (
                       <div className="flex items-center justify-center gap-1">
@@ -534,19 +536,19 @@ export default function CashBookTable({
               <tr className="bg-slate-50 border-t-2 border-slate-200">
                 <td
                   style={{ width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }}
-                  className="px-2.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                  className="pl-3.5 pr-2 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                 >
                   {t('tblTotals')}
                 </td>
                 <td
                   style={{ width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }}
-                  className="px-2.5 py-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs"
+                  className="px-2 py-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs"
                 >
                   +{formatCurrency(totalIncome)}
                 </td>
                 <td
                   style={{ width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }}
-                  className="px-2.5 py-3 text-right font-extrabold text-rose-600 whitespace-nowrap text-xs"
+                  className="pl-2 pr-4 py-3 text-right font-extrabold text-rose-600 whitespace-nowrap text-xs"
                 >
                   -{formatCurrency(totalExpense)}
                 </td>
@@ -622,16 +624,16 @@ function MobileTableHeader({
 }) {
   // Mobile Order: First 3 columns (Date, Income, Expense) defaultly show, others viewable upon moving aside
   const headers = [
-    { key: 'thDate', align: 'text-left', style: { width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }, className: 'px-2.5' },
-    { key: 'thIncome', align: 'text-right', style: { width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }, className: 'px-2.5' },
-    { key: 'thExpense', align: 'text-right', style: { width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }, className: 'px-2.5' },
+    { key: 'thDate', align: 'text-left', style: { width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }, className: 'pl-3.5 pr-2' },
+    { key: 'thIncome', align: 'text-right', style: { width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }, className: 'px-2' },
+    { key: 'thExpense', align: 'text-right', style: { width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }, className: 'pl-2 pr-4' },
     { key: 'thBookingRule', align: 'text-left', style: { minWidth: 160, width: 160 }, className: 'px-3' },
     { key: 'thBookingText', align: 'text-left', style: { minWidth: 150, width: 150 }, className: 'px-3' },
     { key: 'thVat', align: 'text-center', style: { minWidth: 65, width: 65 }, className: 'px-2.5' },
     { key: 'thBalance', align: 'text-right', style: { minWidth: 110, width: 110 }, className: 'px-3' },
     { key: 'thVoucherNo', align: 'text-left', style: { minWidth: 85, width: 85 }, className: 'px-2.5' },
     { key: 'thDocument', align: 'text-center', style: { minWidth: 60, width: 60 }, className: 'px-2' },
-    { key: 'thActions', align: 'text-center', style: { minWidth: 70, width: 70 }, className: 'px-2' },
+    { key: 'thActions', align: 'text-center', style: { minWidth: 95, width: 95 }, className: 'pl-2 pr-4' },
   ];
 
   return (
