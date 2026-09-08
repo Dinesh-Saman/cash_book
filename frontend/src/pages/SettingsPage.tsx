@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle, Cookie } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { settingsApi, bookingRulesApi } from '../lib/api';
 import { type Settings, type BookingRule, getDefaultPermissions } from '../types';
 import { useAuthStore } from '../store/authStore';
-import { useCookieStore } from '../store/cookieStore';
 import { useTranslation } from '../store/languageStore';
 import { translateBookingRuleName } from '../lib/i18n/translations';
 import { formatAmountWithCommas, parseFormattedAmount } from '../lib/utils';
@@ -49,9 +48,6 @@ export default function SettingsPage() {
   const canManageSettings = userPerms?.canManageSettings ?? (user?.role === 'admin');
   const isAdmin = user?.role === 'admin' || canManageSettings;
   const canManageOpeningBalance = userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant');
-  const cookiePrefs = useCookieStore((s) => s.preferences);
-  const openCookieModal = useCookieStore((s) => s.setModalOpen);
-  const resetCookieConsent = useCookieStore((s) => s.resetConsent);
   const { t, language } = useTranslation();
 
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -557,107 +553,6 @@ export default function SettingsPage() {
           </div>
         </Section>
       )}
-
-      {/* Cookie & Privacy Section */}
-      <Section title={t('secCookieSettings')}>
-        <div className="space-y-6">
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
-            {t('cookieSettingsDesc')}
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs sm:text-sm text-slate-900">
-                    {language === 'de' ? 'Technisch Notwendig' : 'Strictly Necessary'}
-                  </span>
-                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-lg">
-                    {t('cookieAlwaysActive')}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                  {language === 'de' ? 'JWT-Sitzung, Sprache, GoBD-Audit' : 'JWT Session, Language, GoBD Audit'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs sm:text-sm text-slate-900">
-                    {language === 'de' ? 'Funktionale Cookies' : 'Functional Cookies'}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border ${
-                      cookiePrefs.functional
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    {cookiePrefs.functional
-                      ? language === 'de'
-                        ? 'Aktiv'
-                        : 'Active'
-                      : language === 'de'
-                      ? 'Inaktiv'
-                      : 'Inactive'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                  {language === 'de' ? 'Layout, Filter-Voreinstellungen' : 'Layout, Filter Preferences'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs sm:text-sm text-slate-900">
-                    {language === 'de' ? 'Analyse & Performance' : 'Analytics & Performance'}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border ${
-                      cookiePrefs.analytics
-                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-200'
-                    }`}
-                  >
-                    {cookiePrefs.analytics
-                      ? language === 'de'
-                        ? 'Aktiv'
-                        : 'Active'
-                      : language === 'de'
-                      ? 'Inaktiv'
-                      : 'Inactive'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                  {language === 'de' ? 'Anonyme Ladezeitmessung' : 'Anonymous Speed Metrics'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 pt-2 w-full">
-            <button
-              type="button"
-              onClick={() => openCookieModal(true)}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-brand transition-all min-w-0"
-            >
-              <Cookie size={15} className="flex-shrink-0" />
-              <span className="truncate">{t('cookieModalTitle')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={resetCookieConsent}
-              className="flex-1 sm:flex-none flex items-center justify-center px-2.5 sm:px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold transition-colors min-w-0"
-            >
-              <span className="truncate">{t('cookieResetConsent')}</span>
-            </button>
-          </div>
-        </div>
-      </Section>
 
       {/* Confirmation Modal for Finalization */}
       {confirmFinalizeYear &&
