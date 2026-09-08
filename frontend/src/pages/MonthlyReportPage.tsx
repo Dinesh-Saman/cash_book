@@ -143,26 +143,29 @@ export default function MonthlyReportPage() {
       </div>
 
       {/* Period & Date Range Selector Card */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <CustomSelect
-            value={year}
-            onChange={(val) => handleYearChange(Number(val))}
-            options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-            className="w-[82px]"
-            buttonClassName="px-2.5 gap-1"
-          />
-          <CustomSelect
-            value={month}
-            onChange={(val) => handleMonthChange(Number(val))}
-            options={MONTH_INDICES.map((m) => ({ value: m, label: getMonthName(m) }))}
-            className="w-36 sm:w-44"
-          />
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full sm:w-auto">
+          {/* Year & Month Dropdowns */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <CustomSelect
+              value={year}
+              onChange={(val) => handleYearChange(Number(val))}
+              options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+              className="w-24 sm:w-[82px] flex-shrink-0"
+              buttonClassName="px-2.5 gap-1"
+            />
+            <CustomSelect
+              value={month}
+              onChange={(val) => handleMonthChange(Number(val))}
+              options={MONTH_INDICES.map((m) => ({ value: m, label: getMonthName(m) }))}
+              className="flex-1 sm:w-44 min-w-0"
+            />
+          </div>
 
           <div className="hidden lg:block h-6 w-px bg-slate-200 mx-1" />
 
           {/* Date Range Start and End */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
             <div
               onClick={(e) => {
                 if (e.target !== fromDateRef.current) {
@@ -171,9 +174,9 @@ export default function MonthlyReportPage() {
                   } catch {}
                 }
               }}
-              className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer"
+              className="h-10 flex items-center justify-between sm:justify-start gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer w-full sm:w-auto"
             >
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none">{t('lblFromDate')}:</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none shrink-0">{t('lblFromDate')}:</span>
               <input
                 ref={fromDateRef}
                 type="date"
@@ -186,7 +189,7 @@ export default function MonthlyReportPage() {
                     e.currentTarget.showPicker?.();
                   } catch {}
                 }}
-                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer flex-1 min-w-0 text-right sm:text-left"
               />
             </div>
 
@@ -198,9 +201,9 @@ export default function MonthlyReportPage() {
                   } catch {}
                 }
               }}
-              className="h-10 flex items-center gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer"
+              className="h-10 flex items-center justify-between sm:justify-start gap-2 bg-white border border-slate-200 px-3.5 rounded-xl shadow-xs hover:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-600 transition-all cursor-pointer w-full sm:w-auto"
             >
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none">{t('lblToDate')}:</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider select-none shrink-0">{t('lblToDate')}:</span>
               <input
                 ref={toDateRef}
                 type="date"
@@ -213,7 +216,7 @@ export default function MonthlyReportPage() {
                     e.currentTarget.showPicker?.();
                   } catch {}
                 }}
-                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                className="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer flex-1 min-w-0 text-right sm:text-left"
               />
             </div>
 
@@ -221,7 +224,7 @@ export default function MonthlyReportPage() {
               <button
                 type="button"
                 onClick={resetToFullMonth}
-                className="h-10 px-3.5 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition-all shadow-xs flex items-center justify-center"
+                className="col-span-1 min-[480px]:col-span-2 sm:col-auto h-10 px-3.5 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-xl transition-all shadow-xs flex items-center justify-center w-full sm:w-auto"
               >
                 {t('btnFullMonth')}
               </button>
@@ -229,7 +232,7 @@ export default function MonthlyReportPage() {
           </div>
         </div>
 
-        <div className="text-xs font-semibold text-slate-500">
+        <div className="hidden sm:block text-xs font-semibold text-slate-500">
           {isCustomRange
             ? `${startDate ? formatDate(startDate) : ''} – ${endDate ? formatDate(endDate) : ''}`
             : `${getMonthName(month)} ${year}`}
