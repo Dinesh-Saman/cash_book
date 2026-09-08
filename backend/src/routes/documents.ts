@@ -20,7 +20,10 @@ export async function serveDocument(req: any, res: any) {
     }
 
     const safeFilename = path.basename(filename);
-    const filePath = path.join(process.cwd(), 'uploads', safeFilename);
+    let filePath = path.join(process.cwd(), 'uploads', safeFilename);
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(require('os').tmpdir(), 'uploads', safeFilename);
+    }
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, message: 'Document not found' });

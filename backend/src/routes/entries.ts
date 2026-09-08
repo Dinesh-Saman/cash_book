@@ -7,8 +7,12 @@ import { authenticate } from '../middleware/auth';
 import { validateExpense, recalculateBalancesFrom, getCurrentBalance } from '../services/balanceService';
 import { logAction } from '../services/auditService';
 
+import os from 'os';
+import path from 'path';
+
+const uploadDir = process.env.VERCEL ? path.join(os.tmpdir(), 'uploads') : 'uploads/';
 const upload = multer({
-  dest: 'uploads/',
+  dest: uploadDir,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
