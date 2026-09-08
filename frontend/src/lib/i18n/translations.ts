@@ -119,7 +119,7 @@ export const translations = {
 
     // Monthly Report
     monthlyReportTitle: 'Monatsbericht',
-    cardMonthStartBalance: 'Anfangsbestand (Monat)',
+    cardMonthStartBalance: 'Anfangsbestand',
     cardTotalIncome: 'Gesamteinnahmen',
     cardTotalExpense: 'Gesamtausgaben',
     cardMonthBalance: 'Monatssaldo',
@@ -405,7 +405,7 @@ export const translations = {
 
     // Monthly Report
     monthlyReportTitle: 'Monthly Report',
-    cardMonthStartBalance: 'Opening Balance (Month)',
+    cardMonthStartBalance: 'Opening Balance',
     cardTotalIncome: 'Total Income',
     cardTotalExpense: 'Total Expenses',
     cardMonthBalance: 'Net Balance',

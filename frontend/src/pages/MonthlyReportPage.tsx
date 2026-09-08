@@ -257,6 +257,7 @@ export default function MonthlyReportPage() {
             value: startBalance,
             color: 'text-slate-800',
             bg: 'bg-slate-50 border-slate-200 shadow-xs',
+            isOpening: true,
           },
           {
             label: t('cardTotalIncome'),
@@ -283,8 +284,17 @@ export default function MonthlyReportPage() {
             bg: 'bg-white border-slate-200 shadow-xs',
           },
         ].map((c) => (
-          <div key={c.label} className={`p-4 rounded-2xl border ${c.bg}`}>
-            <p className="text-xs font-semibold text-slate-500 mb-1">{c.label}</p>
+          <div
+            key={c.label}
+            className={`rounded-2xl border ${c.bg} ${
+              c.isOpening
+                ? 'col-span-2 md:col-span-1 p-3.5 sm:p-4 flex md:block items-center justify-between'
+                : 'p-4'
+            }`}
+          >
+            <p className={`text-xs font-semibold text-slate-500 ${c.isOpening ? 'mb-0 md:mb-1' : 'mb-1'}`}>
+              {c.label}
+            </p>
             <p className={`text-base sm:text-lg font-extrabold ${c.color}`}>
               {formatCurrency(c.value)}
             </p>
