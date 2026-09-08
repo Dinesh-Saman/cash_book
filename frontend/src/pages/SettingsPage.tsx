@@ -639,21 +639,21 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="flex items-center gap-2 sm:gap-3 pt-2 w-full">
             <button
               type="button"
               onClick={() => openCookieModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-brand transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-brand transition-all min-w-0"
             >
-              <Cookie size={16} />
-              <span>{t('cookieModalTitle')}</span>
+              <Cookie size={15} className="flex-shrink-0" />
+              <span className="truncate">{t('cookieModalTitle')}</span>
             </button>
             <button
               type="button"
               onClick={resetCookieConsent}
-              className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold transition-colors"
+              className="flex-1 sm:flex-none flex items-center justify-center px-2.5 sm:px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold transition-colors min-w-0"
             >
-              {t('cookieResetConsent')}
+              <span className="truncate">{t('cookieResetConsent')}</span>
             </button>
           </div>
         </div>
