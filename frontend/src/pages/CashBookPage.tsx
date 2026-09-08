@@ -54,8 +54,13 @@ export default function CashBookPage() {
     : null;
 
   useEffect(() => {
-    fetchEntries();
-    fetchSummary();
+    const isMobile = window.innerWidth < 640;
+    if (isMobile && selectedMonth === null) {
+      setSelectedPeriod(selectedYear, new Date().getMonth() + 1);
+    } else {
+      fetchEntries();
+      fetchSummary();
+    }
     settingsApi
       .get()
       .then((res) => {
@@ -141,54 +146,54 @@ export default function CashBookPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           {canAddIncome && (
             <button
               onClick={openIncomeForm}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
             >
-              <Plus size={17} className="stroke-[2.5]" />
-              {t('btnAddIncome')}
+              <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
+              <span>{t('btnAddIncome')}</span>
             </button>
           )}
 
           {canAddExpense && (
             <button
               onClick={openExpenseForm}
-              className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
             >
-              <Plus size={17} className="stroke-[2.5]" />
-              {t('btnAddExpense')}
+              <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
+              <span>{t('btnAddExpense')}</span>
             </button>
           )}
 
           {canManageSettings && (
             <button
               onClick={() => setShowOpeningBalance(true)}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-sm font-bold shadow-xs transition-all"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
               title={t('modalOpeningBalanceTitle')}
             >
-              <Scale size={16} className="text-amber-700" />
+              <Scale size={16} className="text-amber-700 flex-shrink-0" />
               <span>{t('tblOpeningBalance')}</span>
             </button>
           )}
 
           {isYearFinalized && (canAddIncome || canAddExpense || canEditEntry) && (
-            <span className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold">
-              🔒 {t('statusInactive')}: {selectedYear}
+            <span className="px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold whitespace-nowrap">
+              🔒 {selectedYear}
             </span>
           )}
 
           {/* Export Dropdown */}
           {canExport && (
-            <div className="relative z-50">
+            <div className="flex-1 sm:flex-initial relative z-50 min-w-0">
               <button
                 onClick={() => setShowExportMenu((prev) => !prev)}
                 disabled={isExporting}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-semibold transition-all border border-slate-200 shadow-xs"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs sm:text-sm font-semibold transition-all border border-slate-200 shadow-xs whitespace-nowrap min-w-0"
               >
-                <Download size={16} className="text-brand-600" />
-                {isExporting ? t('btnExporting') : t('btnExport')}
+                <Download size={15} className="text-brand-600 flex-shrink-0" />
+                <span>{isExporting ? t('btnExporting') : t('btnExport')}</span>
               </button>
               {showExportMenu && (
                 <>
@@ -196,7 +201,7 @@ export default function CashBookPage() {
                     className="fixed inset-0 z-40"
                     onClick={() => setShowExportMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
                     {[
                       { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
                       {
@@ -225,43 +230,71 @@ export default function CashBookPage() {
       </div>
 
       {/* Period Filter Card */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2.5 relative z-10">
-        <div className="flex-shrink-0 relative z-10">
-          <CustomSelect
-            value={selectedYear}
-            onChange={(val) => setSelectedPeriod(Number(val), selectedMonth)}
-            options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-            className="w-28"
-          />
+      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center gap-2.5 relative z-10">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Year Select */}
+          <div className="flex-1 sm:flex-initial sm:w-28 relative z-20">
+            <CustomSelect
+              value={selectedYear}
+              onChange={(val) => setSelectedPeriod(Number(val), selectedMonth)}
+              options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+              className="w-full sm:w-28"
+            />
+          </div>
+
+          {/* Month Dropdown - Mobile View Only */}
+          <div className="flex-1 sm:hidden relative z-20">
+            <CustomSelect
+              value={selectedMonth === null ? 'all' : String(selectedMonth)}
+              onChange={(val) => {
+                if (val === 'all') {
+                  setSelectedPeriod(selectedYear, null);
+                } else {
+                  setSelectedPeriod(selectedYear, Number(val));
+                }
+              }}
+              options={[
+                { value: 'all', label: t('btnAllMonths') },
+                ...MONTH_INDICES.map((m) => ({
+                  value: String(m),
+                  label: getMonthName(m),
+                })),
+              ]}
+              className="w-full"
+            />
+          </div>
         </div>
 
-        <button
-          onClick={() => setSelectedPeriod(selectedYear, null)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex-shrink-0 ${
-            selectedMonth === null
-              ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
-              : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
-          }`}
-        >
-          {t('btnAllMonths')}
-        </button>
+        {/* Desktop View: Month Tabs (Hidden on Mobile) */}
+        <div className="hidden sm:flex items-center gap-2.5 flex-1 min-w-0">
+          <button
+            onClick={() => setSelectedPeriod(selectedYear, null)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex-shrink-0 ${
+              selectedMonth === null
+                ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+            }`}
+          >
+            {t('btnAllMonths')}
+          </button>
 
-        <div className="h-5 w-px bg-slate-200 flex-shrink-0 mx-0.5" />
+          <div className="h-5 w-px bg-slate-200 flex-shrink-0 mx-0.5" />
 
-        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
-          {MONTH_INDICES.map((m) => (
-            <button
-              key={m}
-              onClick={() => setSelectedPeriod(selectedYear, m)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border whitespace-nowrap flex-shrink-0 ${
-                selectedMonth === m
-                  ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
-              }`}
-            >
-              {getMonthName(m)}
-            </button>
-          ))}
+          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+            {MONTH_INDICES.map((m) => (
+              <button
+                key={m}
+                onClick={() => setSelectedPeriod(selectedYear, m)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border whitespace-nowrap flex-shrink-0 ${
+                  selectedMonth === m
+                    ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+                }`}
+              >
+                {getMonthName(m)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

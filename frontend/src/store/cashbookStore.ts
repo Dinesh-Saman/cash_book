@@ -14,12 +14,14 @@ interface CashbookState {
   deleteEntry: (id: string) => Promise<void>;
 }
 
+const isMobileDevice = typeof window !== 'undefined' ? window.innerWidth < 640 : false;
+
 export const useCashbookStore = create<CashbookState>((set, get) => ({
   entries: [],
   summary: { currentBalance: 0, totalIncome: 0, totalExpense: 0, openingBalance: 0 },
   isLoading: false,
   selectedYear: new Date().getFullYear(),
-  selectedMonth: new Date().getMonth() + 1,
+  selectedMonth: isMobileDevice ? new Date().getMonth() + 1 : null,
 
   fetchEntries: async () => {
     set({ isLoading: true });
