@@ -37,9 +37,8 @@ export function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   const lang = useLanguageStore.getState().language;
   const dateObj = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
-  const formatStr = lang === 'en' ? 'MM/dd/yyyy' : 'dd.MM.yyyy';
   const locale = lang === 'en' ? enUS : de;
-  return format(dateObj, formatStr, { locale });
+  return format(dateObj, 'dd.MM.yyyy', { locale });
 }
 
 export function formatDateForInput(dateStr: string): string {

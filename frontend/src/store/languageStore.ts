@@ -108,9 +108,8 @@ export function useTranslation() {
     (dateStr: string) => {
       if (!dateStr) return '';
       const dateObj = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
-      const formatStr = language === 'en' ? 'MM/dd/yyyy' : 'dd.MM.yyyy';
       const locale = language === 'en' ? enUS : de;
-      return format(dateObj, formatStr, { locale });
+      return format(dateObj, 'dd.MM.yyyy', { locale });
     },
     [language]
   );

@@ -42,6 +42,49 @@ export default function MonthlyReportPage() {
   const [isExporting, setIsExporting] = useState(false);
   const { t, formatCurrency, getMonthName, formatDate, language } = useTranslation();
 
+  const mobileContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const el = mobileContainerRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      if (el.clientWidth > 0) {
+        setContainerWidth(el.clientWidth);
+      }
+    };
+
+    updateWidth();
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(Math.floor(entry.contentRect.width));
+        }
+      }
+    });
+
+    ro.observe(el);
+    window.addEventListener('resize', updateWidth);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
+
+  const availableWidth = containerWidth > 0
+    ? containerWidth
+    : typeof window !== 'undefined'
+    ? Math.max(300, window.innerWidth - 26)
+    : 360;
+
+  const colDateWidth = Math.max(82, Math.round(availableWidth * 0.28));
+  const remainingWidth = Math.max(160, availableWidth - colDateWidth);
+  const colIncomeWidth = Math.floor(remainingWidth / 2);
+  const colExpenseWidth = remainingWidth - colIncomeWidth;
+
   const handleYearChange = (newYear: number) => {
     setYear(newYear);
     const bounds = getMonthDateBounds(newYear, month);
@@ -416,23 +459,27 @@ export default function MonthlyReportPage() {
       </div>
 
       {/* Table: Mobile View (< md) - Order: Date -> Income -> Expense -> Rule -> Text -> VAT -> Balance -> Voucher No -> Document */}
-      <div className="block md:hidden rounded-2xl border border-slate-200 bg-white shadow-card overflow-x-auto">
-        <table className="w-full text-sm text-left border-collapse">
+      <div
+        ref={mobileContainerRef}
+        className="block md:hidden rounded-2xl border border-slate-200 bg-white shadow-card overflow-x-auto"
+      >
+        <table className="min-w-full w-max text-sm text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200">
               {[
-                { label: t('thDate'), align: 'text-left', className: 'w-[82px] min-w-[82px] px-2.5' },
-                { label: t('thIncome'), align: 'text-right', className: 'w-[110px] min-w-[110px] px-2.5' },
-                { label: t('thExpense'), align: 'text-right', className: 'w-[110px] min-w-[110px] px-2.5 border-r border-slate-200' },
-                { label: t('thBookingRule'), align: 'text-left', className: 'min-w-[150px] px-3' },
-                { label: t('thBookingText'), align: 'text-left', className: 'min-w-[140px] px-3' },
-                { label: t('thVat'), align: 'text-center', className: 'min-w-[65px] px-2.5' },
-                { label: t('thBalance'), align: 'text-right', className: 'min-w-[100px] px-3' },
-                { label: t('thVoucherNo'), align: 'text-left', className: 'min-w-[85px] px-2.5' },
-                { label: t('thDocument'), align: 'text-center', className: 'min-w-[60px] px-2' },
+                { label: t('thDate'), align: 'text-left', style: { width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }, className: 'px-2.5' },
+                { label: t('thIncome'), align: 'text-right', style: { width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }, className: 'px-2.5' },
+                { label: t('thExpense'), align: 'text-right', style: { width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }, className: 'px-2.5' },
+                { label: t('thBookingRule'), align: 'text-left', style: { minWidth: 160, width: 160 }, className: 'px-3' },
+                { label: t('thBookingText'), align: 'text-left', style: { minWidth: 150, width: 150 }, className: 'px-3' },
+                { label: t('thVat'), align: 'text-center', style: { minWidth: 65, width: 65 }, className: 'px-2.5' },
+                { label: t('thBalance'), align: 'text-right', style: { minWidth: 110, width: 110 }, className: 'px-3' },
+                { label: t('thVoucherNo'), align: 'text-left', style: { minWidth: 85, width: 85 }, className: 'px-2.5' },
+                { label: t('thDocument'), align: 'text-center', style: { minWidth: 60, width: 60 }, className: 'px-2' },
               ].map((h) => (
                 <th
                   key={h.label}
+                  style={h.style}
                   className={`py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap ${h.align} ${h.className}`}
                 >
                   {h.label}
@@ -468,11 +515,17 @@ export default function MonthlyReportPage() {
                   }`}
                 >
                   {/* 1. Date */}
-                  <td className="w-[82px] min-w-[82px] px-2.5 py-3 text-slate-800 font-medium whitespace-nowrap text-xs">
+                  <td
+                    style={{ width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }}
+                    className="px-2.5 py-3 text-slate-800 font-medium whitespace-nowrap text-xs"
+                  >
                     {formatDate(entry.date)}
                   </td>
                   {/* 2. Income */}
-                  <td className="w-[110px] min-w-[110px] px-2.5 py-3 text-right whitespace-nowrap">
+                  <td
+                    style={{ width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }}
+                    className="px-2.5 py-3 text-right whitespace-nowrap"
+                  >
                     {entry.type === 'income' ? (
                       <span className="font-bold text-emerald-600 whitespace-nowrap text-xs">
                         +{formatCurrency(entry.amount)}
@@ -481,8 +534,11 @@ export default function MonthlyReportPage() {
                       <span className="text-slate-300 text-xs">—</span>
                     )}
                   </td>
-                  {/* 3. Expense */}
-                  <td className="w-[110px] min-w-[110px] px-2.5 py-3 text-right whitespace-nowrap border-r border-slate-200">
+                  {/* 3. Expense (no vertical line after expense) */}
+                  <td
+                    style={{ width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }}
+                    className="px-2.5 py-3 text-right whitespace-nowrap"
+                  >
                     {entry.type === 'expense' ? (
                       <span className="font-bold text-rose-600 whitespace-nowrap text-xs">
                         -{formatCurrency(entry.amount)}
@@ -492,17 +548,26 @@ export default function MonthlyReportPage() {
                     )}
                   </td>
                   {/* 4. Booking Rule */}
-                  <td className="min-w-[150px] px-3 py-3 text-slate-900 font-medium whitespace-nowrap text-xs">
+                  <td
+                    style={{ minWidth: 160, width: 160 }}
+                    className="px-3 py-3 text-slate-900 font-medium whitespace-nowrap text-xs"
+                  >
                     {typeof entry.bookingRule === 'object'
                       ? translateBookingRuleName(entry.bookingRule?.name, language)
                       : translateBookingRuleName(String(entry.bookingRule), language)}
                   </td>
                   {/* 5. Booking Text */}
-                  <td className="min-w-[140px] px-3 py-3 text-slate-600 text-xs">
+                  <td
+                    style={{ minWidth: 150, width: 150 }}
+                    className="px-3 py-3 text-slate-600 text-xs"
+                  >
                     {entry.bookingText || '—'}
                   </td>
                   {/* 6. VAT */}
-                  <td className="min-w-[65px] px-2.5 py-3 text-center whitespace-nowrap">
+                  <td
+                    style={{ minWidth: 65, width: 65 }}
+                    className="px-2.5 py-3 text-center whitespace-nowrap"
+                  >
                     <span
                       className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
                         VAT_COLORS[entry.vatPercentage]
@@ -512,15 +577,24 @@ export default function MonthlyReportPage() {
                     </span>
                   </td>
                   {/* 7. Balance */}
-                  <td className="min-w-[100px] px-3 py-3 text-right font-extrabold text-slate-900 whitespace-nowrap text-xs">
+                  <td
+                    style={{ minWidth: 110, width: 110 }}
+                    className="px-3 py-3 text-right font-extrabold text-slate-900 whitespace-nowrap text-xs"
+                  >
                     {formatCurrency(entry.cashBalance)}
                   </td>
                   {/* 8. Voucher No */}
-                  <td className="min-w-[85px] px-2.5 py-3 text-slate-600 font-mono text-xs whitespace-nowrap">
+                  <td
+                    style={{ minWidth: 85, width: 85 }}
+                    className="px-2.5 py-3 text-slate-600 font-mono text-xs whitespace-nowrap"
+                  >
                     {entry.voucherNo || '—'}
                   </td>
                   {/* 9. Document */}
-                  <td className="min-w-[60px] px-2 py-3 text-center text-slate-400 text-xs">
+                  <td
+                    style={{ minWidth: 60, width: 60 }}
+                    className="px-2 py-3 text-center text-slate-400 text-xs"
+                  >
                     {entry.documentPath ? `📎 ${t('docAvailable')}` : '—'}
                   </td>
                 </tr>
@@ -530,13 +604,22 @@ export default function MonthlyReportPage() {
           {entries.length > 0 && (
             <tfoot>
               <tr className="bg-slate-50 border-t-2 border-slate-200">
-                <td className="w-[82px] min-w-[82px] px-2.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                <td
+                  style={{ width: colDateWidth, minWidth: colDateWidth, maxWidth: colDateWidth }}
+                  className="px-2.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                >
                   {t('tblTotals')}
                 </td>
-                <td className="w-[110px] min-w-[110px] px-2.5 py-3 text-right font-extrabold text-emerald-600 text-xs whitespace-nowrap">
+                <td
+                  style={{ width: colIncomeWidth, minWidth: colIncomeWidth, maxWidth: colIncomeWidth }}
+                  className="px-2.5 py-3 text-right font-extrabold text-emerald-600 text-xs whitespace-nowrap"
+                >
                   +{formatCurrency(totalIncome)}
                 </td>
-                <td className="w-[110px] min-w-[110px] px-2.5 py-3 text-right font-extrabold text-rose-600 text-xs whitespace-nowrap border-r border-slate-200">
+                <td
+                  style={{ width: colExpenseWidth, minWidth: colExpenseWidth, maxWidth: colExpenseWidth }}
+                  className="px-2.5 py-3 text-right font-extrabold text-rose-600 text-xs whitespace-nowrap"
+                >
                   -{formatCurrency(totalExpense)}
                 </td>
                 <td colSpan={6} />
