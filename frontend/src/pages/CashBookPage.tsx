@@ -228,12 +228,13 @@ export default function CashBookPage() {
       <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center gap-2.5 relative z-10">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Year Select */}
-          <div className="flex-1 sm:flex-initial sm:w-28 relative z-20">
+          <div className="w-[82px] flex-shrink-0 relative z-20">
             <CustomSelect
               value={selectedYear}
               onChange={(val) => setSelectedPeriod(Number(val), selectedMonth)}
               options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-              className="w-full sm:w-28"
+              className="w-[82px]"
+              buttonClassName="px-2.5 gap-1"
             />
           </div>
 

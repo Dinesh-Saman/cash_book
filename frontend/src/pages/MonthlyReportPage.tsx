@@ -149,7 +149,8 @@ export default function MonthlyReportPage() {
             value={year}
             onChange={(val) => handleYearChange(Number(val))}
             options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-            className="w-28 sm:w-32"
+            className="w-[82px]"
+            buttonClassName="px-2.5 gap-1"
           />
           <CustomSelect
             value={month}

@@ -12,6 +12,7 @@ interface CustomSelectProps {
   onChange: (value: any) => void;
   options: SelectOption[];
   className?: string;
+  buttonClassName?: string;
   placeholder?: string;
 }
 
@@ -20,6 +21,7 @@ export default function CustomSelect({
   onChange,
   options,
   className,
+  buttonClassName,
   placeholder,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -60,13 +62,16 @@ export default function CustomSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full h-10 flex items-center justify-between gap-2 px-3.5 bg-white border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold hover:border-brand-500/50 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs transition-all"
+        className={cn(
+          'w-full h-10 flex items-center justify-between gap-1.5 px-3 bg-white border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold hover:border-brand-500/50 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs transition-all',
+          buttonClassName
+        )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder || ''}</span>
         <ChevronDown
-          size={16}
+          size={15}
           className={cn(
             'text-slate-400 transition-transform duration-150 flex-shrink-0',
             isOpen && 'rotate-180 text-brand-600'
@@ -92,14 +97,14 @@ export default function CustomSelect({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  'w-full flex items-center justify-between px-3.5 py-2 text-xs font-semibold text-left transition-colors',
+                  'w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors',
                   isSelected
                     ? 'bg-brand-50 text-brand-700 font-bold'
                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
-                <span>{opt.label}</span>
-                {isSelected && <Check size={14} className="text-brand-600 flex-shrink-0" />}
+                <span className="truncate">{opt.label}</span>
+                {isSelected && <Check size={14} className="text-brand-600 flex-shrink-0 ml-1" />}
               </button>
             );
           })}

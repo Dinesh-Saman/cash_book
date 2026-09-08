@@ -124,7 +124,8 @@ export default function AnnualReportPage() {
             value={year}
             onChange={(val) => setYear(Number(val))}
             options={YEARS.map((y) => ({ value: y, label: String(y) }))}
-            className="w-full sm:w-36"
+            className="w-full sm:w-[84px]"
+            buttonClassName="px-2.5 gap-1"
           />
           <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
             {[
