@@ -19,10 +19,10 @@ const inputClass =
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+      <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-slate-50/60">
         <h2 className="font-bold text-slate-900 text-sm sm:text-base">{title}</h2>
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-4 sm:p-6">{children}</div>
     </div>
   );
 }
@@ -295,14 +295,14 @@ export default function SettingsPage() {
       {/* Booking Rules */}
       <Section title={t('secBookingRules')}>
         <div className="space-y-2">
-          <div className="max-h-80 overflow-y-auto pr-2 space-y-1.5 divide-y divide-slate-100">
+          <div className="max-h-80 overflow-y-auto pr-1 sm:pr-2 space-y-2 divide-y divide-slate-100">
             {bookingRules.map((rule) => (
               <div
                 key={rule._id}
-                className="flex items-center justify-between gap-3 pt-2 first:pt-0"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 pt-2.5 first:pt-0"
               >
                 {editingRule?._id === rule._id ? (
-                  <form onSubmit={handleEditRule} className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-2 py-1">
+                  <form onSubmit={handleEditRule} className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 py-1">
                     <input
                       value={editRuleName}
                       onChange={(e) => setEditRuleName(e.target.value)}
@@ -310,7 +310,7 @@ export default function SettingsPage() {
                       autoFocus
                     />
                     {/* VAT Pills for editing rule */}
-                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
+                    <div className="flex items-center justify-between sm:justify-start gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
                       <span className="text-[10px] font-semibold text-slate-500">{t('thVat')}:</span>
                       {([0, 7, 19] as const).map((v) => (
                         <button
@@ -326,63 +326,67 @@ export default function SettingsPage() {
                           {v}%
                         </button>
                       ))}
-                    </div>
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center flex-shrink-0"
-                      title={t('btnSave')}
-                    >
-                      <Save size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingRule(null)}
-                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs flex-shrink-0"
-                      title={t('btnCancel')}
-                    >
-                      <X size={13} />
-                    </button>
-                  </form>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-semibold text-slate-800">
-                        {translateBookingRuleName(rule.name, language)}
-                      </span>
-                      {rule.defaultVat !== undefined && (
-                        <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200">
-                          {rule.defaultVat}% {t('thVat')}
-                        </span>
-                      )}
-                      {rule.isDefault && (
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200">
-                          {t('badgeDefaultRule')}
-                        </span>
-                      )}
-                    </div>
-                    {isAdmin && !rule.isDefault && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 ml-1 sm:ml-2">
                         <button
-                          onClick={() => {
-                            setEditingRule(rule);
-                            setEditRuleName(rule.name);
-                            setEditRuleVat(rule.defaultVat ?? 0);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                          title={t('btnEdit')}
+                          type="submit"
+                          className="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center"
+                          title={t('btnSave')}
                         >
-                          <Edit2 size={13} />
+                          <Save size={13} />
                         </button>
                         <button
-                          onClick={() => handleDeleteRule(rule)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title={t('btnDelete')}
+                          type="button"
+                          onClick={() => setEditingRule(null)}
+                          className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs"
+                          title={t('btnCancel')}
                         >
-                          <Trash2 size={13} />
+                          <X size={13} />
                         </button>
                       </div>
-                    )}
-                  </>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5 w-full">
+                    <span className="text-xs font-semibold text-slate-800 leading-snug">
+                      {translateBookingRuleName(rule.name, language)}
+                    </span>
+                    <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        {rule.defaultVat !== undefined && (
+                          <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 whitespace-nowrap">
+                            {rule.defaultVat}% {t('thVat')}
+                          </span>
+                        )}
+                        {rule.isDefault && (
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
+                            {t('badgeDefaultRule')}
+                          </span>
+                        )}
+                      </div>
+                      {isAdmin && !rule.isDefault && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingRule(rule);
+                              setEditRuleName(rule.name);
+                              setEditRuleVat(rule.defaultVat ?? 0);
+                            }}
+                            className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                            title={t('btnEdit')}
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRule(rule)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title={t('btnDelete')}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -394,32 +398,34 @@ export default function SettingsPage() {
                 value={newRuleName}
                 onChange={(e) => setNewRuleName(e.target.value)}
                 placeholder={t('placeholderNewRule')}
-                className="flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+                className="w-full sm:flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
               />
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
-                <span className="text-[11px] font-semibold text-slate-500">{t('thVat')}:</span>
-                {([0, 7, 19] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setNewRuleVat(v)}
-                    className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
-                      newRuleVat === v
-                        ? 'bg-brand-600 text-white shadow-xs'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {v}%
-                  </button>
-                ))}
+              <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl flex-1 sm:flex-initial">
+                  <span className="text-[11px] font-semibold text-slate-500">{t('thVat')}:</span>
+                  {([0, 7, 19] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setNewRuleVat(v)}
+                      className={`flex-1 sm:flex-initial px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
+                        newRuleVat === v
+                          ? 'bg-brand-600 text-white shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {v}%
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="submit"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-brand transition-colors whitespace-nowrap flex-shrink-0"
+                >
+                  <Plus size={15} />
+                  {t('btnAddRule')}
+                </button>
               </div>
-              <button
-                type="submit"
-                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-brand transition-colors"
-              >
-                <Plus size={15} />
-                {t('btnAddRule')}
-              </button>
             </form>
           )}
         </div>
