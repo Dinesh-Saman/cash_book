@@ -29,7 +29,7 @@ export default function CashBookPage() {
     setSelectedPeriod,
   } = useCashbookStore();
   const user = useAuthStore((state) => state.user);
-  const { t, getMonthName, getMonthShort, language } = useTranslation();
+  const { t, getMonthName, language } = useTranslation();
 
   const showIncomeForm = useUIStore((state) => state.showIncomeForm);
   const showExpenseForm = useUIStore((state) => state.showExpenseForm);
@@ -254,21 +254,20 @@ export default function CashBookPage() {
           </div>
         </div>
 
-        {/* Desktop View: All 12 Months in a single grid without scrolling/moving */}
-        <div className="hidden sm:grid grid-cols-12 gap-1 xl:gap-1.5 flex-1 min-w-0">
+        {/* Desktop View: All 12 Months full names without truncation */}
+        <div className="hidden sm:flex items-center gap-1 xl:gap-1.5 flex-1 min-w-0">
           {MONTH_INDICES.map((m) => (
             <button
               key={m}
               onClick={() => setSelectedPeriod(selectedYear, m)}
-              className={`w-full py-1.5 px-0.5 xl:px-1 rounded-xl text-xs font-semibold transition-all border text-center truncate ${
+              className={`flex-auto py-1.5 px-1 xl:px-2 rounded-xl text-xs font-semibold transition-all border text-center whitespace-nowrap ${
                 selectedMonth === m
                   ? 'bg-brand-600 border-brand-600 text-white shadow-brand font-bold'
                   : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
               }`}
               title={getMonthName(m)}
             >
-              <span className="hidden xl:inline">{getMonthName(m)}</span>
-              <span className="xl:hidden">{getMonthShort(m)}</span>
+              {getMonthName(m)}
             </button>
           ))}
         </div>
