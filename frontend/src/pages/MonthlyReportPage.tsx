@@ -112,7 +112,7 @@ export default function MonthlyReportPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="text-center sm:text-left w-full sm:w-auto">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             {t('monthlyReportTitle')}
           </h1>

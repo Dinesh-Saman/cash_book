@@ -130,8 +130,8 @@ export default function CashBookPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-30">
-        <div>
-          <div className="flex items-center gap-3">
+        <div className="text-center sm:text-left w-full sm:w-auto">
+          <div className="flex items-center justify-center sm:justify-start gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {t('cashBookTitle')} {selectedYear}
             </h1>
