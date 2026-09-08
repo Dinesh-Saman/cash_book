@@ -7,28 +7,26 @@ interface CashbookState {
   summary: Summary | null;
   isLoading: boolean;
   selectedYear: number;
-  selectedMonth: number | null; // null = show all months for the year
+  selectedMonth: number; // 1 - 12
   fetchEntries: () => Promise<void>;
   fetchSummary: () => Promise<void>;
-  setSelectedPeriod: (year: number, month: number | null) => void;
+  setSelectedPeriod: (year: number, month: number) => void;
   deleteEntry: (id: string) => Promise<void>;
 }
-
-const isMobileDevice = typeof window !== 'undefined' ? window.innerWidth < 640 : false;
 
 export const useCashbookStore = create<CashbookState>((set, get) => ({
   entries: [],
   summary: { currentBalance: 0, totalIncome: 0, totalExpense: 0, openingBalance: 0 },
   isLoading: false,
   selectedYear: new Date().getFullYear(),
-  selectedMonth: isMobileDevice ? new Date().getMonth() + 1 : null,
+  selectedMonth: new Date().getMonth() + 1,
 
   fetchEntries: async () => {
     set({ isLoading: true });
     try {
       const { selectedYear, selectedMonth } = get();
-      const params: Record<string, number> = { year: selectedYear, limit: 500 };
-      if (selectedMonth !== null) params.month = selectedMonth;
+      const monthToFetch = selectedMonth || new Date().getMonth() + 1;
+      const params: Record<string, number> = { year: selectedYear, month: monthToFetch, limit: 500 };
       const res = await entriesApi.getEntries(params);
       set({ entries: res.data.data.entries });
     } catch (err) {

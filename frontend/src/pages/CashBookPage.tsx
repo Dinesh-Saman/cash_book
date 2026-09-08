@@ -29,7 +29,7 @@ export default function CashBookPage() {
     setSelectedPeriod,
   } = useCashbookStore();
   const user = useAuthStore((state) => state.user);
-  const { t, getMonthName, language } = useTranslation();
+  const { t, getMonthName, getMonthShort, language } = useTranslation();
 
   const showIncomeForm = useUIStore((state) => state.showIncomeForm);
   const showExpenseForm = useUIStore((state) => state.showExpenseForm);
@@ -54,13 +54,8 @@ export default function CashBookPage() {
     : null;
 
   useEffect(() => {
-    const isMobile = window.innerWidth < 640;
-    if (isMobile && selectedMonth === null) {
-      setSelectedPeriod(selectedYear, new Date().getMonth() + 1);
-    } else {
-      fetchEntries();
-      fetchSummary();
-    }
+    fetchEntries();
+    fetchSummary();
     settingsApi
       .get()
       .then((res) => {
@@ -104,12 +99,12 @@ export default function CashBookPage() {
     setIsExporting(true);
     setShowExportMenu(false);
     try {
-      if (type === 'pdf') await exportsApi.downloadPDF(selectedYear, selectedMonth ?? undefined);
+      if (type === 'pdf') await exportsApi.downloadPDF(selectedYear, selectedMonth);
       else if (type === 'excel')
-        await exportsApi.downloadExcel(selectedYear, selectedMonth ?? undefined);
+        await exportsApi.downloadExcel(selectedYear, selectedMonth);
       else if (type === 'xml')
-        await exportsApi.downloadXML(selectedYear, selectedMonth ?? undefined);
-      else await exportsApi.downloadDatev(selectedYear, selectedMonth ?? undefined);
+        await exportsApi.downloadXML(selectedYear, selectedMonth);
+      else await exportsApi.downloadDatev(selectedYear, selectedMonth);
       toast.success(language === 'de' ? 'Export erfolgreich' : 'Export complete');
     } catch {
       toast.error(language === 'de' ? 'Fehler beim Exportieren' : 'Export error');
@@ -142,7 +137,7 @@ export default function CashBookPage() {
             )}
           </div>
           <p className="text-sm font-medium text-slate-500 mt-0.5">
-            {selectedMonth ? `${t('lblMonthlyView')}: ${getMonthName(selectedMonth)} ${selectedYear}` : t('cashBookYearlyView')}
+            {t('lblMonthlyView')}: {getMonthName(selectedMonth)} {selectedYear}
           </p>
         </div>
 
@@ -242,59 +237,39 @@ export default function CashBookPage() {
             />
           </div>
 
-          {/* Month Dropdown - Mobile View Only */}
+          {/* Month Dropdown - Mobile View Only (all 12 months) */}
           <div className="flex-1 sm:hidden relative z-20">
             <CustomSelect
-              value={selectedMonth === null ? 'all' : String(selectedMonth)}
+              value={selectedMonth}
               onChange={(val) => {
-                if (val === 'all') {
-                  setSelectedPeriod(selectedYear, null);
-                } else {
-                  setSelectedPeriod(selectedYear, Number(val));
-                }
+                setSelectedPeriod(selectedYear, Number(val));
               }}
-              options={[
-                { value: 'all', label: t('btnAllMonths') },
-                ...MONTH_INDICES.map((m) => ({
-                  value: String(m),
-                  label: getMonthName(m),
-                })),
-              ]}
+              options={MONTH_INDICES.map((m) => ({
+                value: m,
+                label: getMonthName(m),
+              }))}
               className="w-full"
             />
           </div>
         </div>
 
-        {/* Desktop View: Month Tabs (Hidden on Mobile) */}
-        <div className="hidden sm:flex items-center gap-2.5 flex-1 min-w-0">
-          <button
-            onClick={() => setSelectedPeriod(selectedYear, null)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border whitespace-nowrap flex-shrink-0 ${
-              selectedMonth === null
-                ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
-                : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
-            }`}
-          >
-            {t('btnAllMonths')}
-          </button>
-
-          <div className="h-5 w-px bg-slate-200 flex-shrink-0 mx-0.5" />
-
-          <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
-            {MONTH_INDICES.map((m) => (
-              <button
-                key={m}
-                onClick={() => setSelectedPeriod(selectedYear, m)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border whitespace-nowrap flex-shrink-0 ${
-                  selectedMonth === m
-                    ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
-                }`}
-              >
-                {getMonthName(m)}
-              </button>
-            ))}
-          </div>
+        {/* Desktop View: All 12 Months in a single grid without scrolling/moving */}
+        <div className="hidden sm:grid grid-cols-12 gap-1 xl:gap-1.5 flex-1 min-w-0">
+          {MONTH_INDICES.map((m) => (
+            <button
+              key={m}
+              onClick={() => setSelectedPeriod(selectedYear, m)}
+              className={`w-full py-1.5 px-0.5 xl:px-1 rounded-xl text-xs font-semibold transition-all border text-center truncate ${
+                selectedMonth === m
+                  ? 'bg-brand-600 border-brand-600 text-white shadow-brand font-bold'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+              }`}
+              title={getMonthName(m)}
+            >
+              <span className="hidden xl:inline">{getMonthName(m)}</span>
+              <span className="xl:hidden">{getMonthShort(m)}</span>
+            </button>
+          ))}
         </div>
       </div>
 
