@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { BookingRule } from '../models/BookingRule';
+import { CashBookEntry } from '../models/CashBookEntry';
 import { authenticate, authorize } from '../middleware/auth';
 import { logAction } from '../services/auditService';
 
@@ -71,6 +72,18 @@ router.delete('/:id', authorize('admin'), async (req: any, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Standard-Buchungsregeln können nicht gelöscht werden / Default booking rules cannot be deleted.'
+      });
+    }
+
+    const usageCount = await CashBookEntry.countDocuments({
+      bookingRule: rule._id,
+      isDeleted: false
+    });
+
+    if (usageCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Diese Buchungsregel kann nicht gelöscht werden, da sie von ${usageCount} aktiven Kassenbucheintrag/-einträgen verwendet wird. / This booking rule cannot be deleted because it is in use by ${usageCount} active cash book entry/entries.`
       });
     }
 

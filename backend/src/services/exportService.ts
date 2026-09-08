@@ -359,7 +359,7 @@ export async function exportToExcel(
   // Table Data Rows
   for (const e of entries) {
     const row = worksheet.addRow([
-      format(new Date(e.date), 'yyyy-MM-dd'),
+      format(new Date(e.date), 'dd.MM.yyyy'),
       e.voucherNo || '',
       translateRule((e.bookingRule as any)?.name || '', lang),
       e.bookingText || '',
@@ -404,7 +404,7 @@ export function exportToXML(entries: ICashBookEntry[], reportTitle: string): str
 
   for (const e of entries) {
     root.ele('Entry')
-      .ele('Date').txt(format(new Date(e.date), 'yyyy-MM-dd')).up()
+      .ele('Date').txt(format(new Date(e.date), 'dd.MM.yyyy')).up()
       .ele('VoucherNo').txt(e.voucherNo || '').up()
       .ele('BookingRule').txt((e.bookingRule as any)?.name || '').up()
       .ele('BookingText').txt(e.bookingText || '').up()

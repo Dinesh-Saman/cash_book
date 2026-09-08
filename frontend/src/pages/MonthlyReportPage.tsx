@@ -288,8 +288,8 @@ export default function MonthlyReportPage() {
         ))}
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-card overflow-x-auto">
+      {/* Table: Desktop View (>= md) */}
+      <div className="hidden md:block rounded-2xl border border-slate-200 bg-white shadow-card overflow-x-auto">
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200">
@@ -409,6 +409,137 @@ export default function MonthlyReportPage() {
                   -{formatCurrency(totalExpense)}
                 </td>
                 <td colSpan={3} />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* Table: Mobile View (< md) - Order: Date -> Income -> Expense -> Rule -> Text -> VAT -> Balance -> Voucher No -> Document */}
+      <div className="block md:hidden rounded-2xl border border-slate-200 bg-white shadow-card overflow-x-auto">
+        <table className="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50/80 border-b border-slate-200">
+              {[
+                { label: t('thDate'), align: 'text-left' },
+                { label: t('thIncome'), align: 'text-right' },
+                { label: t('thExpense'), align: 'text-right' },
+                { label: t('thBookingRule'), align: 'text-left' },
+                { label: t('thBookingText'), align: 'text-left' },
+                { label: t('thVat'), align: 'text-center' },
+                { label: t('thBalance'), align: 'text-right' },
+                { label: t('thVoucherNo'), align: 'text-left' },
+                { label: t('thDocument'), align: 'text-center' },
+              ].map((h) => (
+                <th
+                  key={h.label}
+                  className={`px-3.5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap ${h.align}`}
+                >
+                  {h.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  <td colSpan={9} className="px-3.5 py-3">
+                    <div className="h-4 bg-slate-200/70 rounded animate-pulse" />
+                  </td>
+                </tr>
+              ))
+            ) : entries.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-3.5 py-12 text-center text-slate-400">
+                  {t('noMonthlyEntries')}
+                </td>
+              </tr>
+            ) : (
+              entries.map((entry, idx) => (
+                <tr
+                  key={entry._id}
+                  className={`hover:bg-brand-50/30 transition-colors ${
+                    idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                  } ${
+                    entry.type === 'income'
+                      ? 'border-l-4 border-l-emerald-500'
+                      : 'border-l-4 border-l-rose-500'
+                  }`}
+                >
+                  {/* 1. Date */}
+                  <td className="px-3.5 py-3 text-slate-800 font-medium whitespace-nowrap text-xs">
+                    {formatDate(entry.date)}
+                  </td>
+                  {/* 2. Income */}
+                  <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                    {entry.type === 'income' ? (
+                      <span className="font-bold text-emerald-600 whitespace-nowrap text-xs">
+                        +{formatCurrency(entry.amount)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
+                    )}
+                  </td>
+                  {/* 3. Expense */}
+                  <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                    {entry.type === 'expense' ? (
+                      <span className="font-bold text-rose-600 whitespace-nowrap text-xs">
+                        -{formatCurrency(entry.amount)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
+                    )}
+                  </td>
+                  {/* 4. Booking Rule */}
+                  <td className="px-3.5 py-3 text-slate-900 font-medium whitespace-nowrap text-xs">
+                    {typeof entry.bookingRule === 'object'
+                      ? translateBookingRuleName(entry.bookingRule?.name, language)
+                      : translateBookingRuleName(String(entry.bookingRule), language)}
+                  </td>
+                  {/* 5. Booking Text */}
+                  <td className="px-3.5 py-3 text-slate-600 text-xs min-w-[120px]">
+                    {entry.bookingText || '—'}
+                  </td>
+                  {/* 6. VAT */}
+                  <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+                        VAT_COLORS[entry.vatPercentage]
+                      }`}
+                    >
+                      {entry.vatPercentage}%
+                    </span>
+                  </td>
+                  {/* 7. Balance */}
+                  <td className="px-3.5 py-3 text-right font-extrabold text-slate-900 whitespace-nowrap text-xs">
+                    {formatCurrency(entry.cashBalance)}
+                  </td>
+                  {/* 8. Voucher No */}
+                  <td className="px-3.5 py-3 text-slate-600 font-mono text-xs whitespace-nowrap">
+                    {entry.voucherNo || '—'}
+                  </td>
+                  {/* 9. Document */}
+                  <td className="px-3.5 py-3 text-center text-slate-400 text-xs">
+                    {entry.documentPath ? `📎 ${t('docAvailable')}` : '—'}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {entries.length > 0 && (
+            <tfoot>
+              <tr className="bg-slate-50 border-t-2 border-slate-200">
+                <td className="px-3.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                  {t('tblTotals')}
+                </td>
+                <td className="px-3.5 py-3 text-right font-extrabold text-emerald-600 text-xs whitespace-nowrap">
+                  +{formatCurrency(totalIncome)}
+                </td>
+                <td className="px-3.5 py-3 text-right font-extrabold text-rose-600 text-xs whitespace-nowrap">
+                  -{formatCurrency(totalExpense)}
+                </td>
+                <td colSpan={6} />
               </tr>
             </tfoot>
           )}

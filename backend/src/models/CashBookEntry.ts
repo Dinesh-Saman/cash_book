@@ -24,7 +24,7 @@ export interface ICashBookEntry extends Document {
 
 const cashBookEntrySchema = new Schema<ICashBookEntry>({
   date: { type: Date, required: true },
-  voucherNo: { type: String, required: true },
+  voucherNo: { type: String, default: '' },
   bookingRule: { type: Schema.Types.ObjectId, ref: 'BookingRule', required: true },
   bookingText: { type: String, required: true },
   type: { type: String, enum: ['income', 'expense'], required: true },

@@ -3,6 +3,7 @@ import { Plus, Download, FileSpreadsheet, FileCode, FileText as FileCsv, FileTex
 import toast from 'react-hot-toast';
 import { useCashbookStore } from '../store/cashbookStore';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import { useTranslation } from '../store/languageStore';
 import { settingsApi, exportsApi } from '../lib/api';
 import CashBookTable from '../components/cashbook/CashBookTable';
@@ -30,10 +31,15 @@ export default function CashBookPage() {
   const user = useAuthStore((state) => state.user);
   const { t, getMonthName } = useTranslation();
 
+  const showIncomeForm = useUIStore((state) => state.showIncomeForm);
+  const showExpenseForm = useUIStore((state) => state.showExpenseForm);
+  const editingEntry = useUIStore((state) => state.editingEntry);
+  const openIncomeForm = useUIStore((state) => state.openIncomeForm);
+  const openExpenseForm = useUIStore((state) => state.openExpenseForm);
+  const closeForm = useUIStore((state) => state.closeForm);
+  const setEditingEntry = useUIStore((state) => state.setEditingEntry);
+
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [showIncomeForm, setShowIncomeForm] = useState(false);
-  const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<CashBookEntry | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<CashBookEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<CashBookEntry | null>(null);
@@ -72,8 +78,6 @@ export default function CashBookPage() {
 
   const handleEdit = (entry: CashBookEntry) => {
     setEditingEntry(entry);
-    if (entry.type === 'income') setShowIncomeForm(true);
-    else setShowExpenseForm(true);
   };
 
   const handleDeleteConfirm = async () => {
@@ -140,10 +144,7 @@ export default function CashBookPage() {
         <div className="flex items-center gap-2.5 flex-wrap">
           {canAddIncome && (
             <button
-              onClick={() => {
-                setEditingEntry(null);
-                setShowIncomeForm(true);
-              }}
+              onClick={openIncomeForm}
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
             >
               <Plus size={17} className="stroke-[2.5]" />
@@ -153,10 +154,7 @@ export default function CashBookPage() {
 
           {canAddExpense && (
             <button
-              onClick={() => {
-                setEditingEntry(null);
-                setShowExpenseForm(true);
-              }}
+              onClick={openExpenseForm}
               className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-sm font-bold shadow-xs transition-all"
             >
               <Plus size={17} className="stroke-[2.5]" />
@@ -321,10 +319,7 @@ export default function CashBookPage() {
         <EntryForm
           type="income"
           entry={editingEntry}
-          onClose={() => {
-            setShowIncomeForm(false);
-            setEditingEntry(null);
-          }}
+          onClose={closeForm}
           onSuccess={handleRefresh}
         />
       )}
@@ -332,10 +327,7 @@ export default function CashBookPage() {
         <EntryForm
           type="expense"
           entry={editingEntry}
-          onClose={() => {
-            setShowExpenseForm(false);
-            setEditingEntry(null);
-          }}
+          onClose={closeForm}
           onSuccess={handleRefresh}
         />
       )}
