@@ -135,7 +135,7 @@ export default function SettingsPage() {
       setSettings(res.data.data);
       toast.success(t('btnSaveOpeningBalance'));
     } catch {
-      toast.error('Fehler beim Speichern / Error saving');
+      toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
     } finally {
       setIsSaving(false);
     }
@@ -154,7 +154,7 @@ export default function SettingsPage() {
       setSettings(res.data.data);
       toast.success(t('btnSaveDatev'));
     } catch {
-      toast.error('Fehler beim Speichern / Error saving');
+      toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
     } finally {
       setIsSaving(false);
     }
@@ -173,7 +173,7 @@ export default function SettingsPage() {
       setNewRuleVat(0);
       toast.success(t('btnAddRule'));
     } catch {
-      toast.error('Fehler beim Hinzufügen / Error adding');
+      toast.error(language === 'de' ? 'Fehler beim Hinzufügen' : 'Error adding');
     }
   };
 
@@ -191,13 +191,17 @@ export default function SettingsPage() {
       setEditingRule(null);
       toast.success(t('btnUpdate'));
     } catch {
-      toast.error('Fehler / Error');
+      toast.error(language === 'de' ? 'Fehler beim Aktualisieren' : 'Error updating');
     }
   };
 
   const handleDeleteRule = async (rule: BookingRule) => {
     if (rule.isDefault) {
-      toast.error('Standard-Buchungsregeln können nicht gelöscht werden / Default rules cannot be deleted');
+      toast.error(
+        language === 'de'
+          ? 'Standard-Buchungsregeln können nicht gelöscht werden.'
+          : 'Default booking rules cannot be deleted.'
+      );
       return;
     }
     try {
@@ -205,7 +209,10 @@ export default function SettingsPage() {
       setBookingRules((prev) => prev.filter((r) => r._id !== rule._id));
       toast.success(t('btnDelete'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Fehler beim Löschen / Error deleting');
+      toast.error(
+        err?.response?.data?.message ||
+          (language === 'de' ? 'Fehler beim Löschen' : 'Error deleting')
+      );
     }
   };
 

@@ -101,7 +101,7 @@ export default function AnnualReportPage() {
       else await exportsApi.downloadDatev(year);
       toast.success(t('btnExport'));
     } catch {
-      toast.error('Fehler beim Exportieren / Export error');
+      toast.error(language === 'de' ? 'Fehler beim Exportieren' : 'Export error');
     } finally {
       setIsExporting(false);
     }

@@ -68,10 +68,13 @@ router.delete('/:id', authorize('admin'), async (req: any, res, next) => {
     const rule = await BookingRule.findById(req.params.id);
     if (!rule) return res.status(404).json({ success: false, message: 'Rule not found' });
     
+    const lang = req.headers['accept-language']?.toLowerCase().startsWith('en') ? 'en' : 'de';
     if (rule.isDefault) {
       return res.status(400).json({
         success: false,
-        message: 'Standard-Buchungsregeln können nicht gelöscht werden / Default booking rules cannot be deleted.'
+        message: lang === 'en'
+          ? 'Default booking rules cannot be deleted.'
+          : 'Standard-Buchungsregeln können nicht gelöscht werden.'
       });
     }
 
@@ -83,7 +86,9 @@ router.delete('/:id', authorize('admin'), async (req: any, res, next) => {
     if (usageCount > 0) {
       return res.status(400).json({
         success: false,
-        message: `Diese Buchungsregel kann nicht gelöscht werden, da sie von ${usageCount} aktiven Kassenbucheintrag/-einträgen verwendet wird. / This booking rule cannot be deleted because it is in use by ${usageCount} active cash book entry/entries.`
+        message: lang === 'en'
+          ? `This booking rule cannot be deleted because it is in use by ${usageCount} active cash book entry/entries.`
+          : `Diese Buchungsregel kann nicht gelöscht werden, da sie von ${usageCount} aktiven Kassenbucheintrag/-einträgen verwendet wird.`
       });
     }
 

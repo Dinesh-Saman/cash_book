@@ -102,7 +102,7 @@ export default function MonthlyReportPage() {
       else await exportsApi.downloadDatev(year, month, language, startDate, endDate);
       toast.success(t('btnExport'));
     } catch {
-      toast.error('Fehler beim Exportieren / Export error');
+      toast.error(language === 'de' ? 'Fehler beim Exportieren' : 'Export error');
     } finally {
       setIsExporting(false);
     }

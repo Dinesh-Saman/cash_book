@@ -8,6 +8,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Resolves a bilingual string formatted as "German text / English text"
+ * to only the string matching the user's active language.
+ */
+export function resolveBilingualMessage(message?: string, language?: 'de' | 'en'): string {
+  if (!message || typeof message !== 'string') return message || '';
+  const lang = language || useLanguageStore.getState().language || 'de';
+  if (message.includes(' / ')) {
+    const parts = message.split(' / ');
+    if (parts.length >= 2) {
+      return (lang === 'en' ? parts[1] : parts[0]).trim();
+    }
+  }
+  return message;
+}
+
 export function formatCurrency(amount: number): string {
   const lang = useLanguageStore.getState().language;
   const locale = lang === 'en' ? 'en-US' : 'de-DE';

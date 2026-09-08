@@ -29,7 +29,7 @@ export default function CashBookPage() {
     setSelectedPeriod,
   } = useCashbookStore();
   const user = useAuthStore((state) => state.user);
-  const { t, getMonthName } = useTranslation();
+  const { t, getMonthName, language } = useTranslation();
 
   const showIncomeForm = useUIStore((state) => state.showIncomeForm);
   const showExpenseForm = useUIStore((state) => state.showExpenseForm);
@@ -89,7 +89,7 @@ export default function CashBookPage() {
       setDeletingEntry(null);
       handleRefresh();
     } catch {
-      toast.error('Fehler beim Löschen / Error deleting');
+      toast.error(language === 'de' ? 'Fehler beim Löschen' : 'Error deleting');
     } finally {
       setIsDeleting(false);
     }
@@ -105,9 +105,9 @@ export default function CashBookPage() {
       else if (type === 'xml')
         await exportsApi.downloadXML(selectedYear, selectedMonth ?? undefined);
       else await exportsApi.downloadDatev(selectedYear, selectedMonth ?? undefined);
-      toast.success('Export erfolgreich / Export complete');
+      toast.success(language === 'de' ? 'Export erfolgreich' : 'Export complete');
     } catch {
-      toast.error('Fehler beim Exportieren / Export error');
+      toast.error(language === 'de' ? 'Fehler beim Exportieren' : 'Export error');
     } finally {
       setIsExporting(false);
     }

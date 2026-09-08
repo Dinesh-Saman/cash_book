@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const login = useAuthStore((state) => state.login);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,9 +34,11 @@ export default function LoginPage() {
       } else {
         const msg =
           err?.response?.data?.message ||
-          'Ungültige E-Mail-Adresse oder Passwort / Invalid email or password';
+          (language === 'de'
+            ? 'Ungültige E-Mail-Adresse oder Passwort'
+            : 'Invalid email or password');
         setError(msg);
-        toast.error('Anmeldung fehlgeschlagen / Login failed');
+        toast.error(language === 'de' ? 'Anmeldung fehlgeschlagen' : 'Login failed');
       }
     } finally {
       setIsLoading(false);

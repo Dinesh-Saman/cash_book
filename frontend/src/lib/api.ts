@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { CashBookEntry, BookingRule, Settings, Summary, AuditLog, User } from '../types';
+import { resolveBilingualMessage } from './utils';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api` : '/api');
 const api = axios.create({ baseURL: apiBaseUrl });
@@ -7,12 +8,24 @@ const api = axios.create({ baseURL: apiBaseUrl });
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const lang = (localStorage.getItem('app_lang') as 'de' | 'en') || 'de';
+  config.headers['Accept-Language'] = lang;
   return config;
 });
 
 api.interceptors.response.use(
-  response => response,
+  response => {
+    const lang = (localStorage.getItem('app_lang') as 'de' | 'en') || 'de';
+    if (response.data && typeof response.data.message === 'string') {
+      response.data.message = resolveBilingualMessage(response.data.message, lang);
+    }
+    return response;
+  },
   error => {
+    const lang = (localStorage.getItem('app_lang') as 'de' | 'en') || 'de';
+    if (error.response?.data && typeof error.response.data.message === 'string') {
+      error.response.data.message = resolveBilingualMessage(error.response.data.message, lang);
+    }
     if (error.response?.status === 401) {
       // Do not trigger page reload/redirect when trying to log in, otherwise it wipes the UI error state
       const isLoginRequest = error.config?.url?.includes('/auth/login');

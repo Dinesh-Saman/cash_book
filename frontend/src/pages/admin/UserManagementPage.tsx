@@ -60,7 +60,7 @@ export default function UserManagementPage() {
     permissions: getDefaultPermissions('accountant'),
   });
   const [isSaving, setIsSaving] = useState(false);
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const PERMISSION_CONFIG: PermissionItem[] = [
     {
@@ -156,7 +156,7 @@ export default function UserManagementPage() {
     usersApi
       .getAll()
       .then((res) => setUsers(res.data.data))
-      .catch(() => toast.error('Fehler beim Laden / Error loading'))
+      .catch(() => toast.error(language === 'de' ? 'Fehler beim Laden' : 'Error loading'))
       .finally(() => setIsLoading(false));
   };
 
@@ -292,7 +292,7 @@ export default function UserManagementPage() {
       fetchUsers();
       toast.success(user.isActive ? t('statusInactive') : t('statusActive'));
     } catch {
-      toast.error('Fehler / Error');
+      toast.error(language === 'de' ? 'Fehler beim Aktualisieren' : 'Error updating');
     }
   };
 

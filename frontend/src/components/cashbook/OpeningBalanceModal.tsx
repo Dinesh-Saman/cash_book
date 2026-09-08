@@ -14,7 +14,7 @@ interface Props {
 
 export default function OpeningBalanceModal({ onClose, onSuccess, currentBalance }: Props) {
   const today = new Date().toISOString().split('T')[0];
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [amount, setAmount] = useState(
     currentBalance !== undefined && currentBalance !== 0
       ? formatAmountWithCommas(String(currentBalance))
@@ -51,7 +51,7 @@ export default function OpeningBalanceModal({ onClose, onSuccess, currentBalance
     e.preventDefault();
     const num = parseFormattedAmount(amount);
     if (!amount || num < 0) {
-      toast.error('Bitte gültigen Betrag eingeben / Please enter valid amount');
+      toast.error(language === 'de' ? 'Bitte gültigen Betrag eingeben' : 'Please enter a valid amount');
       return;
     }
     setIsSaving(true);
@@ -61,7 +61,7 @@ export default function OpeningBalanceModal({ onClose, onSuccess, currentBalance
       onSuccess();
       onClose();
     } catch {
-      toast.error('Fehler beim Speichern');
+      toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
     } finally {
       setIsSaving(false);
     }

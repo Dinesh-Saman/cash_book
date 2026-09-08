@@ -144,7 +144,7 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       setNewRuleVat(0);
       toast.success(t('btnSave'));
     } catch {
-      toast.error('Fehler / Error');
+      toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
     }
   };
 
