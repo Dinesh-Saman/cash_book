@@ -284,7 +284,8 @@ export default function AnnualReportPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2.5 sm:gap-4 text-xs sm:text-sm font-semibold ml-9.5 sm:ml-0 flex-wrap">
+                  {/* Desktop Financial Summary (>= sm) */}
+                  <div className="hidden sm:flex items-center gap-2.5 sm:gap-4 text-xs sm:text-sm font-semibold flex-wrap">
                     <span className="text-emerald-600 font-bold">
                       +{formatCurrency(md.totalIncome)}
                     </span>
@@ -295,6 +296,24 @@ export default function AnnualReportPage() {
                       <span className="text-slate-500 font-medium">{t('cardMonthEndBalance')}: </span>
                       {formatCurrency(md.endBalance)}
                     </span>
+                  </div>
+
+                  {/* Mobile Financial Summary (< sm) */}
+                  <div className="flex sm:hidden flex-col gap-2 w-full pt-2.5 mt-0.5 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-xs font-bold px-0.5">
+                      <span className="text-emerald-600 flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('thIncome')}:</span>
+                        +{formatCurrency(md.totalIncome)}
+                      </span>
+                      <span className="text-rose-600 flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('thExpense')}:</span>
+                        -{formatCurrency(md.totalExpense)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-xs">
+                      <span className="text-slate-500 font-semibold">{t('cardMonthEndBalance')}:</span>
+                      <span className="text-slate-900 font-extrabold">{formatCurrency(md.endBalance)}</span>
+                    </div>
                   </div>
                 </button>
 
