@@ -84,11 +84,13 @@ router.delete('/:id', authorize('admin'), async (req: any, res, next) => {
     });
 
     if (usageCount > 0) {
+      const entryTextEn = usageCount === 1 ? '1 active cash book entry' : `${usageCount} active cash book entries`;
+      const entryTextDe = usageCount === 1 ? '1 aktiven Kassenbucheintrag' : `${usageCount} aktiven Kassenbucheinträgen`;
       return res.status(400).json({
         success: false,
         message: lang === 'en'
-          ? `This booking rule cannot be deleted because it is in use by ${usageCount} active cash book entry/entries.`
-          : `Diese Buchungsregel kann nicht gelöscht werden, da sie von ${usageCount} aktiven Kassenbucheintrag/-einträgen verwendet wird.`
+          ? `This booking rule cannot be deleted:\nIt is in use by ${entryTextEn}.`
+          : `Diese Buchungsregel kann nicht gelöscht werden:\nSie wird von ${entryTextDe} verwendet.`
       });
     }
 

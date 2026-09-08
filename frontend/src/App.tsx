@@ -44,6 +44,9 @@ export default function App() {
             borderRadius: '14px',
             fontSize: '13px',
             fontWeight: '600',
+            maxWidth: '460px',
+            whiteSpace: 'pre-line',
+            lineHeight: '1.4',
           },
           success: {
             iconTheme: {
