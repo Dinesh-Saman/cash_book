@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import mongoose from 'mongoose';
 import { errorHandler } from './middleware/errorHandler';
 
 import authRoutes from './routes/auth';
@@ -27,7 +28,16 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Ensure MongoDB is connected before handling any API request (Serverless support)
+// Health check endpoint (responds immediately)
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    dbState: mongoose.connection.readyState
+  });
+});
+
+// Ensure MongoDB is connected before handling database API requests (Serverless support)
 app.use(async (_req, _res, next) => {
   try {
     await connectDB();
@@ -47,11 +57,6 @@ app.use('/api/users', usersRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/uploads', documentsRoutes);
-
-// Health check endpoint for hosting platforms (Render, Railway, etc.)
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // Serve frontend build in production
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');

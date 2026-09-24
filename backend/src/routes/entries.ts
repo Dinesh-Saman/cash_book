@@ -13,7 +13,6 @@ import { buildMergedPdf, DocumentItem, MAX_TARGET_KB, DYNAMIC_TARGET_5_TO_10_KB 
 import crypto from 'crypto';
 import path from 'path';
 import jsPDF from 'jspdf';
-import sharp from 'sharp';
 
 // ─── Multer: accept up to 100 MB per file (parse up to 50 files; handlers cap at 10) ──
 const upload = multer({

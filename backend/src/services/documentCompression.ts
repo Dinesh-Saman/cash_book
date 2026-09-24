@@ -1,6 +1,3 @@
-import { PDFDocument } from 'pdf-lib';
-import sharp from 'sharp';
-
 export interface DocumentItem {
   buffer: Buffer;
   originalName: string;
@@ -16,7 +13,6 @@ export const DYNAMIC_TARGET_5_TO_10_KB = 470;
 export const DYNAMIC_HARD_LIMIT_5_TO_10_BYTES = 495 * 1024; // strictly below 500 KB (512,000 bytes)
 
 let mupdfModule: any = null;
-
 async function getMuPDF(): Promise<any> {
   if (!mupdfModule) {
     // Dynamic import to support ESM MuPDF with top-level await in CommonJS Node runtime
@@ -24,6 +20,30 @@ async function getMuPDF(): Promise<any> {
     mupdfModule = await dynamicImport('mupdf');
   }
   return mupdfModule;
+}
+
+let sharpModule: any = null;
+async function getSharp(): Promise<any> {
+  if (!sharpModule) {
+    try {
+      const dynamicImport = new Function('specifier', 'return import(specifier)');
+      const mod = await dynamicImport('sharp');
+      sharpModule = mod.default || mod;
+    } catch (e) {
+      console.warn('Sharp module not available, fallback to uncompressed images:', e);
+      return null;
+    }
+  }
+  return sharpModule;
+}
+
+let pdfLibModule: any = null;
+async function getPdfLib(): Promise<any> {
+  if (!pdfLibModule) {
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    pdfLibModule = await dynamicImport('pdf-lib');
+  }
+  return pdfLibModule;
 }
 
 interface PageStrategy {
@@ -79,6 +99,10 @@ export async function compressImageToTargetKB(
   }
 
   try {
+    const sharp = await getSharp();
+    if (!sharp) {
+      return { buffer: buf, contentType };
+    }
     const meta = await sharp(buf).metadata();
     // Maintain generous dimensions so small receipt text remains sharp
     let currentDim = Math.min(Math.max(meta.width || 1800, meta.height || 1800), 1800);
@@ -147,6 +171,10 @@ export async function compressPdfToTargetKB(
   const hardLimit = isDynamic500 ? DYNAMIC_HARD_LIMIT_5_TO_10_BYTES : HARD_LIMIT_BYTES;
 
   try {
+    const { PDFDocument } = await getPdfLib();
+    const sharp = await getSharp();
+    if (!sharp) return pdfBuf;
+
     const mupdf = await getMuPDF();
     const doc = mupdf.Document.openDocument(pdfBuf, 'application/pdf');
     const count = doc.countPages();
@@ -244,6 +272,8 @@ export async function buildMergedPdf(
   items: DocumentItem[],
   targetTotalKB?: number
 ): Promise<Buffer> {
+  const { PDFDocument } = await getPdfLib();
+
   if (items.length === 0) {
     const emptyPdf = await PDFDocument.create();
     emptyPdf.addPage([595, 842]);
@@ -270,7 +300,7 @@ export async function buildMergedPdf(
       for (const item of items) {
         const srcDoc = await PDFDocument.load(item.buffer, { ignoreEncryption: true });
         const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
-        pages.forEach(p => mergedPdf.addPage(p));
+        pages.forEach((p: any) => mergedPdf.addPage(p));
       }
       const saved = await mergedPdf.save({ useObjectStreams: true });
       if (saved.length <= effectiveTargetKB * 1024) {
@@ -281,6 +311,7 @@ export async function buildMergedPdf(
 
   try {
     const mupdf = await getMuPDF();
+    const sharp = await getSharp();
     const allPages: PageItem[] = [];
 
     for (const item of items) {
@@ -306,12 +337,18 @@ export async function buildMergedPdf(
         }
       } else {
         try {
-          const meta = await sharp(item.buffer).metadata();
+          let width = 595;
+          let height = 842;
+          if (sharp) {
+            const meta = await sharp(item.buffer).metadata();
+            width = meta.width || 595;
+            height = meta.height || 842;
+          }
           allPages.push({
             type: 'image',
             imageBuffer: item.buffer,
-            width: meta.width || 595,
-            height: meta.height || 842,
+            width,
+            height,
           });
         } catch (imgErr) {
           console.error('Error reading image with Sharp:', imgErr);
@@ -343,46 +380,55 @@ export async function buildMergedPdf(
           );
           const pngBytes = Buffer.from(pixmap.asPNG());
 
-          let pipeline = sharp(pngBytes).resize({
-            width: strat.maxDim,
-            height: strat.maxDim,
-            fit: 'inside',
-            withoutEnlargement: true,
-          });
+          if (sharp) {
+            let pipeline = sharp(pngBytes).resize({
+              width: strat.maxDim,
+              height: strat.maxDim,
+              fit: 'inside',
+              withoutEnlargement: true,
+            });
 
-          if (strat.grayscale) {
-            pipeline = pipeline.grayscale();
+            if (strat.grayscale) {
+              pipeline = pipeline.grayscale();
+            }
+
+            jpgBuf = await pipeline
+              .jpeg({
+                quality: strat.quality,
+                mozjpeg: true,
+                chromaSubsampling: strat.chroma,
+              })
+              .toBuffer();
+          } else {
+            jpgBuf = pngBytes;
           }
-
-          jpgBuf = await pipeline
-            .jpeg({
-              quality: strat.quality,
-              mozjpeg: true,
-              chromaSubsampling: strat.chroma,
-            })
-            .toBuffer();
         } else {
-          let pipeline = sharp(pageItem.imageBuffer!).rotate().resize({
-            width: strat.maxDim,
-            height: strat.maxDim,
-            fit: 'inside',
-            withoutEnlargement: true,
-          });
+          if (sharp) {
+            let pipeline = sharp(pageItem.imageBuffer!).rotate().resize({
+              width: strat.maxDim,
+              height: strat.maxDim,
+              fit: 'inside',
+              withoutEnlargement: true,
+            });
 
-          if (strat.grayscale) {
-            pipeline = pipeline.grayscale();
+            if (strat.grayscale) {
+              pipeline = pipeline.grayscale();
+            }
+
+            jpgBuf = await pipeline
+              .jpeg({
+                quality: strat.quality,
+                mozjpeg: true,
+                chromaSubsampling: strat.chroma,
+              })
+              .toBuffer();
+          } else {
+            jpgBuf = pageItem.imageBuffer!;
           }
-
-          jpgBuf = await pipeline
-            .jpeg({
-              quality: strat.quality,
-              mozjpeg: true,
-              chromaSubsampling: strat.chroma,
-            })
-            .toBuffer();
         }
 
-        const embedded = await newPdf.embedJpg(jpgBuf);
+        const isPng = jpgBuf[0] === 0x89 && jpgBuf[1] === 0x50;
+        const embedded = isPng ? await newPdf.embedPng(jpgBuf) : await newPdf.embedJpg(jpgBuf);
         const pageW = pageItem.width || 595;
         const pageH = pageItem.height || 842;
         const pdfPage = newPdf.addPage([pageW, pageH]);
@@ -415,8 +461,13 @@ export async function buildMergedPdf(
     return result;
   } catch (err) {
     console.error('Error building merged PDF:', err);
-    const emptyPdf = await PDFDocument.create();
-    emptyPdf.addPage([595, 842]);
-    return Buffer.from(await emptyPdf.save());
+    try {
+      const { PDFDocument } = await getPdfLib();
+      const emptyPdf = await PDFDocument.create();
+      emptyPdf.addPage([595, 842]);
+      return Buffer.from(await emptyPdf.save());
+    } catch {
+      return Buffer.from('');
+    }
   }
 }
