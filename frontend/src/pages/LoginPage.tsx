@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Eye, EyeOff, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { authApi } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
@@ -210,25 +210,6 @@ export default function LoginPage() {
                   </button>
                 </div>
               </form>
-            </div>
-
-            {/* Bottom Security / Trust & Footer Section - Moved a little bit lower */}
-            <div className="mt-7 sm:mt-8 pt-3.5 border-t border-slate-100 flex flex-col items-center gap-1.5 text-center">
-              <div className="flex items-center justify-center gap-2.5 text-[11px] sm:text-xs text-slate-500 font-medium">
-                <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
-                  <ShieldCheck size={13} className="text-emerald-500" />
-                  {language === 'de' ? 'Gesichert' : 'Encrypted'}
-                </span>
-                <span className="text-slate-300">•</span>
-                <span>DATEV Ready</span>
-                <span className="text-slate-300">•</span>
-                <span>GoBD</span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-medium tracking-wide">
-                {language === 'de'
-                  ? 'Sicher • Zuverlässig • Immer an Ihrer Seite'
-                  : 'Secure • Reliable • Always with you'}
-              </p>
             </div>
           </div>
         </div>
