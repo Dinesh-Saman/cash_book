@@ -69,9 +69,9 @@ export default function CashBookTable({
     try {
       await entriesApi.downloadMergedPDF(entryId, voucherNo);
       toast.success(language === 'de' ? 'PDF heruntergeladen' : 'PDF downloaded', { id: toastId });
-    } catch (err) {
+    } catch (err: any) {
       console.error('PDF download error:', err);
-      toast.error(language === 'de' ? 'Fehler beim Herunterladen des PDF' : 'Failed to download PDF', { id: toastId });
+      toast.error(err?.message || (language === 'de' ? 'Fehler beim Herunterladen des PDF' : 'Failed to download PDF'), { id: toastId });
     } finally {
       setDownloadingEntryId(null);
     }

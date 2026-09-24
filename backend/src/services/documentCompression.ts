@@ -270,8 +270,16 @@ export async function buildMergedPdf(
     return Buffer.from(await emptyPdf.save());
   }
 
+  const isBufferPdf = (buf: Buffer) =>
+    buf && buf.length >= 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46; // '%PDF'
+
   // Fast path: if single PDF, return directly with 0 conversion overhead
-  if (items.length === 1 && (items[0].mimeType === 'application/pdf' || /\.pdf$/i.test(items[0].originalName))) {
+  if (
+    items.length === 1 &&
+    (items[0].mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(items[0].originalName) ||
+      isBufferPdf(items[0].buffer))
+  ) {
     return items[0].buffer;
   }
 
@@ -279,9 +287,24 @@ export async function buildMergedPdf(
     const mergedPdf = await PDFDocument.create();
 
     for (const item of items) {
-      const isPdf = item.mimeType === 'application/pdf' || /\.pdf$/i.test(item.originalName);
-      const isPng = item.mimeType === 'image/png' || /\.png$/i.test(item.originalName) || (item.buffer.length > 2 && item.buffer[0] === 0x89 && item.buffer[1] === 0x50);
-      const isJpg = item.mimeType === 'image/jpeg' || item.mimeType === 'image/jpg' || /\.(jpe?g)$/i.test(item.originalName) || (item.buffer.length > 2 && item.buffer[0] === 0xff && item.buffer[1] === 0xd8);
+      const isPdf =
+        item.mimeType === 'application/pdf' ||
+        /\.pdf$/i.test(item.originalName) ||
+        isBufferPdf(item.buffer);
+
+      const isPng =
+        !isPdf &&
+        (item.mimeType === 'image/png' ||
+          /\.png$/i.test(item.originalName) ||
+          (item.buffer.length > 2 && item.buffer[0] === 0x89 && item.buffer[1] === 0x50));
+
+      const isJpg =
+        !isPdf &&
+        !isPng &&
+        (item.mimeType === 'image/jpeg' ||
+          item.mimeType === 'image/jpg' ||
+          /\.(jpe?g)$/i.test(item.originalName) ||
+          (item.buffer.length > 2 && item.buffer[0] === 0xff && item.buffer[1] === 0xd8));
 
       if (isPdf) {
         try {
@@ -312,6 +335,21 @@ export async function buildMergedPdf(
           page.drawImage(embedded, { x, y, width: w, height: h });
         } catch (imgErr) {
           console.error('Error embedding image into PDF:', imgErr);
+        }
+      } else {
+        // Fallback: try loading as PDF, then as JPEG
+        try {
+          const srcDoc = await PDFDocument.load(item.buffer, { ignoreEncryption: true });
+          const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+          pages.forEach((page: any) => mergedPdf.addPage(page));
+        } catch {
+          try {
+            const embedded = await mergedPdf.embedJpg(item.buffer);
+            const page = mergedPdf.addPage([595.28, 841.89]);
+            page.drawImage(embedded, { x: 20, y: 20, width: 555, height: 801 });
+          } catch (embedErr) {
+            console.warn('Could not embed document into merged PDF:', item.originalName, embedErr);
+          }
         }
       }
     }

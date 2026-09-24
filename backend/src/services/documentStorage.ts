@@ -30,8 +30,13 @@ export async function saveDocumentToGridFS(
   originalName: string
 ): Promise<void> {
   const bucket = getGridFSBucket();
+  const ext = (originalName || filename).split('.').pop()?.toLowerCase() || '';
+  const resolvedMime = mimetype && mimetype !== 'application/octet-stream'
+    ? mimetype
+    : (['jpg', 'jpeg', 'png'].includes(ext) ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf');
+
   const uploadStream = bucket.openUploadStream(filename, {
-    contentType: mimetype,
+    contentType: resolvedMime,
     metadata: {
       originalName,
       size: buffer.length,
@@ -77,9 +82,66 @@ export async function getDocumentStream(filename: string): Promise<RetrievedDocu
   if (files.length > 0) {
     const file = files[0];
     const metadata = (file.metadata as any) || {};
-    const originalName = metadata.originalName || file.filename || safeFilename;
-    const ext = originalName.split('.').pop()?.toLowerCase() || '';
-    const contentType = file.contentType || MIME_MAP[ext] || 'application/octet-stream';
+    let originalName = metadata.originalName || file.filename || safeFilename;
+    let ext = originalName.split('.').pop()?.toLowerCase() || '';
+
+    // If originalName has no known extension, look up CashBookEntry for real filename
+    if (!MIME_MAP[ext] || originalName === safeFilename) {
+      try {
+        const entry = await CashBookEntry.findOne({
+          $or: [
+            { documentPath: safeFilename },
+            { documentPath: file.filename },
+            { 'documents.path': safeFilename },
+            { 'documents.path': file.filename },
+          ]
+        }).lean();
+        if (entry) {
+          if (entry.documentPath === safeFilename && entry.documentOriginalName) {
+            originalName = entry.documentOriginalName;
+            ext = originalName.split('.').pop()?.toLowerCase() || '';
+          } else if (Array.isArray(entry.documents)) {
+            const matchedDoc = entry.documents.find((d: any) => d.path === safeFilename || d.path === file.filename);
+            if (matchedDoc && matchedDoc.originalName) {
+              originalName = matchedDoc.originalName;
+              ext = originalName.split('.').pop()?.toLowerCase() || '';
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Determine content type: prefer MIME_MAP[ext] over generic application/octet-stream
+    let contentType = MIME_MAP[ext];
+    if (!contentType) {
+      contentType = (file.contentType && file.contentType !== 'application/octet-stream')
+        ? file.contentType
+        : 'application/octet-stream';
+    }
+
+    // If still octet-stream, check file.filename extension
+    if (contentType === 'application/octet-stream') {
+      const fnExt = (file.filename || '').split('.').pop()?.toLowerCase() || '';
+      if (MIME_MAP[fnExt]) {
+        contentType = MIME_MAP[fnExt];
+        ext = fnExt;
+      }
+    }
+
+    // Default to application/pdf for any non-image document in the cash book
+    if (contentType === 'application/octet-stream') {
+      const isImg = ['jpg', 'jpeg', 'png'].includes(ext);
+      contentType = isImg ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf';
+    }
+
+    // Ensure extension exists on originalName if contentType is known
+    if (contentType === 'application/pdf' && !originalName.toLowerCase().endsWith('.pdf')) {
+      originalName += '.pdf';
+    } else if (contentType === 'image/jpeg' && !/\.(jpe?g)$/i.test(originalName)) {
+      originalName += '.jpg';
+    } else if (contentType === 'image/png' && !/\.png$/i.test(originalName)) {
+      originalName += '.png';
+    }
 
     const downloadStream = bucket.openDownloadStreamByName(file.filename);
     return {
@@ -102,7 +164,8 @@ export async function getDocumentStream(filename: string): Promise<RetrievedDocu
       const entry = await CashBookEntry.findOne({ documentPath: safeFilename });
       const originalName = entry?.documentOriginalName || safeFilename;
       const ext = originalName.split('.').pop()?.toLowerCase() || '';
-      const contentType = MIME_MAP[ext] || 'application/octet-stream';
+      const isImg = ['jpg', 'jpeg', 'png'].includes(ext);
+      const contentType = MIME_MAP[ext] || (isImg ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf');
       const stats = fs.statSync(candidate);
 
       return {

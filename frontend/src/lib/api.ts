@@ -67,14 +67,24 @@ export const entriesApi = {
     api.get<{ success: boolean; data: { nextVoucherNo: string } }>('/entries/next-voucher-no'),
   downloadMergedPDF: async (entryId: string, voucherNo?: string) => {
     const response = await api.get(`/entries/${entryId}/merged-pdf`, { responseType: 'blob' });
+    if (response.data && response.data.type === 'application/json') {
+      let errorMsg = 'Failed to download PDF';
+      try {
+        const text = await response.data.text();
+        const json = JSON.parse(text);
+        errorMsg = json.message || errorMsg;
+      } catch {}
+      throw new Error(errorMsg);
+    }
     const href = URL.createObjectURL(response.data);
     const a = document.createElement('a');
     a.href = href;
-    a.download = `Voucher_${voucherNo || entryId}_Invoice.pdf`;
+    const cleanVoucher = voucherNo ? String(voucherNo).replace(/[^a-zA-Z0-9_-]/g, '_') : entryId;
+    a.download = `Voucher_${cleanVoucher}_Invoice.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(href);
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
   },
 };
 

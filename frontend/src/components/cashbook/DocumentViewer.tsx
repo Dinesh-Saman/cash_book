@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, FileText, Minimize2, ChevronLeft, ChevronRight, Files } from 'lucide-react';
+import { X, Download, FileText, Minimize2, ChevronLeft, ChevronRight, Files, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CashBookEntry, EntryDocument } from '../../types';
 import { entriesApi } from '../../lib/api';
@@ -15,7 +15,16 @@ function getDocuments(entry: CashBookEntry): EntryDocument[] {
   const docs: EntryDocument[] = [];
 
   if (Array.isArray(entry.documents) && entry.documents.length > 0) {
-    docs.push(...entry.documents);
+    for (const d of entry.documents) {
+      if (!d || !d.path) continue;
+      const dExt = (d.originalName || d.path).split('.').pop()?.toLowerCase() || '';
+      const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(dExt) || Boolean(d.mimeType?.startsWith('image/'));
+      docs.push({
+        path: d.path,
+        originalName: d.originalName || d.path,
+        mimeType: d.mimeType || (isImg ? (dExt === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf'),
+      });
+    }
   }
 
   // Legacy single-doc fallback
@@ -24,10 +33,11 @@ function getDocuments(entry: CashBookEntry): EntryDocument[] {
     const mimeMap: Record<string, string> = {
       pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
     };
+    const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
     docs.push({
       path: entry.documentPath,
       originalName: entry.documentOriginalName || entry.documentPath,
-      mimeType: mimeMap[ext] || 'application/octet-stream',
+      mimeType: mimeMap[ext] || (isImg ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf'),
     });
   }
 
@@ -56,9 +66,10 @@ export default function DocumentViewer({ entry, onClose }: Props) {
   const viewUrl = `/uploads/${selected.path}`;
   const downloadUrl = `/uploads/${selected.path}?download=true`;
 
-  const ext = selected.originalName.split('.').pop()?.toLowerCase() || '';
-  const isImage = ['jpg', 'jpeg', 'png'].includes(ext) || selected.mimeType.startsWith('image/');
-  const isPdf = ext === 'pdf' || selected.mimeType === 'application/pdf';
+  const cleanName = selected.originalName || selected.path || 'document';
+  const ext = cleanName.split('.').pop()?.toLowerCase() || '';
+  const isImage = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) || Boolean(selected.mimeType?.startsWith('image/'));
+  const isPdf = !isImage; // All voucher documents in this system are either images or PDFs
 
   const handleMergedPDF = async () => {
     setIsMergingPDF(true);
@@ -69,9 +80,9 @@ export default function DocumentViewer({ entry, onClose }: Props) {
         language === 'de' ? 'Zusammengeführtes PDF heruntergeladen' : 'Merged PDF downloaded',
         { id: toastId }
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Merged PDF download error:', err);
-      toast.error(language === 'de' ? 'Fehler beim Erstellen des PDF' : 'Failed to generate merged PDF', { id: toastId });
+      toast.error(err.message || (language === 'de' ? 'Fehler beim Erstellen des PDF' : 'Failed to generate merged PDF'), { id: toastId });
     } finally {
       setIsMergingPDF(false);
     }
@@ -86,19 +97,27 @@ export default function DocumentViewer({ entry, onClose }: Props) {
       if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
+      let filename = selected.originalName || 'document';
+      if (!filename.includes('.')) {
+        filename += isPdf ? '.pdf' : (isImage ? `.${ext || 'jpg'}` : '');
+      }
       const a = document.createElement('a');
       a.href = url;
-      a.download = selected.originalName || 'document';
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       toast.success(language === 'de' ? 'Datei heruntergeladen' : 'File downloaded', { id: toastId });
     } catch (e) {
       console.error('Download error:', e);
+      let filename = selected.originalName || 'document';
+      if (!filename.includes('.')) {
+        filename += isPdf ? '.pdf' : (isImage ? `.${ext || 'jpg'}` : '');
+      }
       const a = document.createElement('a');
       a.href = downloadUrl;
-      a.download = selected.originalName || 'document';
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -129,6 +148,18 @@ export default function DocumentViewer({ entry, onClose }: Props) {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Open in new browser tab */}
+            <a
+              href={viewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-xs transition-colors"
+              title={language === 'de' ? 'In neuem Tab anzeigen' : 'Open in new tab'}
+            >
+              <ExternalLink size={13} />
+              <span className="hidden sm:inline">{language === 'de' ? 'In neuem Tab' : 'Open Tab'}</span>
+            </a>
+
             {/* Primary Download: Single PDF */}
             <button
               onClick={handleMergedPDF}
@@ -179,8 +210,8 @@ export default function DocumentViewer({ entry, onClose }: Props) {
           {docs.length > 1 && (
             <div className="w-44 flex-shrink-0 border-r border-slate-200 bg-slate-50/60 overflow-y-auto py-3 px-2 space-y-1.5">
               {docs.map((doc, idx) => {
-                const dExt = doc.originalName.split('.').pop()?.toLowerCase() || '';
-                const dIsImage = ['jpg', 'jpeg', 'png'].includes(dExt) || doc.mimeType.startsWith('image/');
+                const dExt = (doc.originalName || doc.path || '').split('.').pop()?.toLowerCase() || '';
+                const dIsImage = ['jpg', 'jpeg', 'png', 'webp'].includes(dExt) || Boolean(doc.mimeType?.startsWith('image/'));
                 const isActive = idx === selectedIdx;
                 return (
                   <button
@@ -212,7 +243,7 @@ export default function DocumentViewer({ entry, onClose }: Props) {
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${
                       dIsImage ? 'bg-brand-100 text-brand-700' : 'bg-rose-100 text-rose-700'
                     }`}>
-                      {dExt}
+                      {dExt || (dIsImage ? 'IMG' : 'PDF')}
                     </span>
                   </button>
                 );
@@ -264,11 +295,44 @@ export default function DocumentViewer({ entry, onClose }: Props) {
                 </div>
               )}
               {isPdf && (
-                <iframe
-                  src={viewUrl}
-                  className="w-full h-full min-h-[60vh] rounded-xl border border-slate-200 shadow-xs bg-white"
-                  title={selected.originalName}
-                />
+                <div className="w-full h-full min-h-[60vh] flex flex-col rounded-xl overflow-hidden bg-white border border-slate-200 shadow-xs">
+                  <object
+                    data={`${viewUrl}#toolbar=1`}
+                    type="application/pdf"
+                    className="w-full flex-1 min-h-[60vh]"
+                  >
+                    <iframe
+                      src={`${viewUrl}#toolbar=1`}
+                      className="w-full flex-1 min-h-[60vh] border-0"
+                      title={cleanName}
+                    >
+                      <div className="flex flex-col items-center justify-center p-8 text-center h-full gap-3 bg-slate-50">
+                        <FileText size={48} className="text-brand-500" />
+                        <p className="text-slate-800 font-semibold text-sm">
+                          {language === 'de' ? 'PDF-Vorschau nicht direkt im Browser unterstützt.' : 'PDF preview not directly supported in this browser frame.'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={viewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+                          >
+                            <ExternalLink size={13} />
+                            {language === 'de' ? 'In neuem Tab anzeigen' : 'Open in New Tab'}
+                          </a>
+                          <button
+                            onClick={handleDownloadSingle}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-xs transition-colors"
+                          >
+                            <Download size={13} />
+                            {language === 'de' ? 'Herunterladen' : 'Download'}
+                          </button>
+                        </div>
+                      </div>
+                    </iframe>
+                  </object>
+                </div>
               )}
               {!isImage && !isPdf && (
                 <div className="flex flex-col items-center justify-center h-64 text-slate-500 gap-3">

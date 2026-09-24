@@ -19,9 +19,12 @@ export async function serveDocument(req: any, res: any) {
 
     const isDownload = req.query.download === 'true' || req.query.download === '1';
     const dispositionType = isDownload ? 'attachment' : 'inline';
+    const safeAscii = doc.originalName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
 
     res.setHeader('Content-Type', doc.contentType);
-    res.setHeader('Content-Disposition', `${dispositionType}; filename="${encodeURIComponent(doc.originalName)}"`);
+    res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(doc.originalName)}`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     if (doc.length) res.setHeader('Content-Length', doc.length);
     return doc.stream.pipe(res);

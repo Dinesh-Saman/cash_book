@@ -67,7 +67,20 @@ function getAllDocuments(entry: any): { path: string; originalName: string; mime
 
   // New documents[] array
   if (Array.isArray(entry.documents) && entry.documents.length > 0) {
-    docs.push(...entry.documents);
+    for (const d of entry.documents) {
+      if (!d || !d.path) continue;
+      const ext = (d.originalName || d.path || '').split('.').pop()?.toLowerCase() || '';
+      const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
+      let mime = d.mimeType;
+      if (!mime || mime === 'application/octet-stream') {
+        mime = isImg ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf';
+      }
+      docs.push({
+        path: d.path,
+        originalName: d.originalName || d.path,
+        mimeType: mime,
+      });
+    }
   }
 
   // Legacy single-document fallback (only if not already in documents[])
@@ -79,10 +92,11 @@ function getAllDocuments(entry: any): { path: string; originalName: string; mime
       jpeg: 'image/jpeg',
       png: 'image/png',
     };
+    const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
     docs.push({
       path: entry.documentPath,
       originalName: entry.documentOriginalName || entry.documentPath,
-      mimeType: mimeMap[ext] || 'application/octet-stream',
+      mimeType: mimeMap[ext] || (isImg ? (ext === 'png' ? 'image/png' : 'image/jpeg') : 'application/pdf'),
     });
   }
 
@@ -184,10 +198,14 @@ router.get('/:id/merged-pdf', async (req: any, res, next) => {
 
     const pdfBuffer = await buildMergedPdf(items);
     const filename = `Voucher_${entry.voucherNo || entry._id}_Invoice.pdf`;
+    const safeFilename = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('X-Document-Count', docs.length.toString());
     res.end(pdfBuffer);
   } catch (error) { next(error); }
