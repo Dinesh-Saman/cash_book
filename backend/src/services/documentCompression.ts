@@ -1,3 +1,5 @@
+import { PDFDocument } from 'pdf-lib';
+
 export interface DocumentItem {
   buffer: Buffer;
   originalName: string;
@@ -35,15 +37,6 @@ async function getSharp(): Promise<any> {
     }
   }
   return sharpModule;
-}
-
-let pdfLibModule: any = null;
-async function getPdfLib(): Promise<any> {
-  if (!pdfLibModule) {
-    const dynamicImport = new Function('specifier', 'return import(specifier)');
-    pdfLibModule = await dynamicImport('pdf-lib');
-  }
-  return pdfLibModule;
 }
 
 interface PageStrategy {
@@ -171,7 +164,6 @@ export async function compressPdfToTargetKB(
   const hardLimit = isDynamic500 ? DYNAMIC_HARD_LIMIT_5_TO_10_BYTES : HARD_LIMIT_BYTES;
 
   try {
-    const { PDFDocument } = await getPdfLib();
     const sharp = await getSharp();
     if (!sharp) return pdfBuf;
 
@@ -272,8 +264,6 @@ export async function buildMergedPdf(
   items: DocumentItem[],
   _targetTotalKB?: number
 ): Promise<Buffer> {
-  const { PDFDocument } = await getPdfLib();
-
   if (items.length === 0) {
     const emptyPdf = await PDFDocument.create();
     emptyPdf.addPage([595.28, 841.89]);
