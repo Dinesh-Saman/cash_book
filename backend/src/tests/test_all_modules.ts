@@ -143,18 +143,18 @@ async function runTests() {
 
     // DATEV Export for SKR04
     settings.datevChartOfAccounts = 'SKR04';
-    const datevStrSKR04 = exportToDatev(testEntries as any, settings);
+    const datevStrSKR04 = exportToDatev(testEntries as any, settings).toString('latin1');
     assert(
-      datevStrSKR04.startsWith('EXTF;700;21;Buchungsstapel;') &&
+      datevStrSKR04.startsWith('"EXTF";700;21;"Buchungsstapel";') &&
       datevStrSKR04.includes(';1000;') &&
-      datevStrSKR04.includes(';S;') &&
-      datevStrSKR04.includes(';H;'),
+      datevStrSKR04.includes(';"S";') &&
+      datevStrSKR04.includes(';"H";'),
       'TC-DAT-01 to TC-DAT-06: DATEV CSV matches EXTF standard and SKR04 account 1000'
     );
 
     // DATEV Export for SKR03
     settings.datevChartOfAccounts = 'SKR03';
-    const datevStrSKR03 = exportToDatev(testEntries as any, settings);
+    const datevStrSKR03 = exportToDatev(testEntries as any, settings).toString('latin1');
     assert(
       datevStrSKR03.includes(';1600;'),
       'TC-DAT-06: DATEV CSV matches SKR03 account 1600'

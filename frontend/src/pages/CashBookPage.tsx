@@ -113,12 +113,19 @@ export default function CashBookPage() {
     }
   };
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const isPastMonth = selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth);
+
   const isYearFinalized = settings?.finalizedYears?.includes(selectedYear) || false;
-  const canAddIncome = (userPerms?.canAddIncome ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
-  const canAddExpense = (userPerms?.canAddExpense ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
-  const canEditEntry = (userPerms?.canEditEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
-  const canDeleteEntry = (userPerms?.canDeleteEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
-  const canManageSettings = (userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isYearFinalized;
+  const isLocked = isYearFinalized || isPastMonth;
+
+  const canAddIncome = (userPerms?.canAddIncome ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isLocked;
+  const canAddExpense = (userPerms?.canAddExpense ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isLocked;
+  const canEditEntry = (userPerms?.canEditEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isLocked;
+  const canDeleteEntry = (userPerms?.canDeleteEntry ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isLocked;
+  const canManageSettings = (userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant')) && !isLocked;
   const canExport = userPerms?.canExportReports ?? true;
 
   return (
@@ -130,11 +137,15 @@ export default function CashBookPage() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {t('cashBookTitle')} {selectedYear}
             </h1>
-            {isYearFinalized && (
+            {isYearFinalized ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold">
                 🔒 {t('yearFinalizedBadge', { year: selectedYear })}
               </span>
-            )}
+            ) : isPastMonth ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold">
+                🔒 {t('monthClosedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
+              </span>
+            ) : null}
           </div>
           <p className="text-sm font-medium text-slate-500 mt-0.5">
             {t('lblMonthlyView')}: {getMonthName(selectedMonth)} {selectedYear}
@@ -309,6 +320,21 @@ export default function CashBookPage() {
         </div>
       )}
 
+      {/* Past Month Closed Banner */}
+      {!isYearFinalized && isPastMonth && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50/90 border border-amber-200 rounded-2xl text-amber-900">
+          <span className="text-2xl">🔒</span>
+          <div>
+            <p className="font-bold text-sm">
+              {t('monthClosedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              {t('descMonthClosed')}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Table */}
       <CashBookTable
         entries={entries}
@@ -316,7 +342,11 @@ export default function CashBookPage() {
         settings={settings ?? undefined}
         onEdit={handleEdit}
         onDelete={setDeletingEntry}
-        onViewDocument={setViewingDoc}
+        onViewDocument={(entry) => {
+          // Open viewer if entry has any documents (new array or legacy field)
+          const hasDocuments = (entry.documents && entry.documents.length > 0) || !!entry.documentPath;
+          if (hasDocuments) setViewingDoc(entry);
+        }}
         onEditOpeningBalance={() => setShowOpeningBalance(true)}
         canEdit={canEditEntry}
         canDelete={canDeleteEntry}
@@ -349,10 +379,9 @@ export default function CashBookPage() {
           isDeleting={isDeleting}
         />
       )}
-      {viewingDoc?.documentPath && (
+      {viewingDoc && (
         <DocumentViewer
-          documentPath={viewingDoc.documentPath}
-          documentOriginalName={viewingDoc.documentOriginalName}
+          entry={viewingDoc}
           onClose={() => setViewingDoc(null)}
         />
       )}

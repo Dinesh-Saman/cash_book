@@ -15,6 +15,7 @@
     { "src": "/api/(.*)", "dest": "/api/index.ts" },
     { "src": "/uploads/(.*)", "dest": "/api/index.ts" },
     { "src": "/assets/(.*)", "dest": "/frontend/assets/$1" },
+    { "src": "/(.*\\.(?:png|jpg|jpeg|svg|ico|json|webp|gif))", "dest": "/frontend/$1" },
     { "src": "/favicon.svg", "dest": "/frontend/favicon.svg" },
     { "src": "/(.*)", "dest": "/frontend/index.html" }
   ]

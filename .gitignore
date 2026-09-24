@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 */node_modules/
 
@@ -37,3 +37,4 @@ yarn-error.log*
 Thumbs.db
 .vercel
 .env*
+DATEV_Format_Pruef_Programm*/

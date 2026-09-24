@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { settingsApi, bookingRulesApi } from '../lib/api';
 import { type Settings, type BookingRule, getDefaultPermissions } from '../types';
@@ -52,6 +52,8 @@ export default function SettingsPage() {
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [bookingRules, setBookingRules] = useState<BookingRule[]>([]);
+  const [isLoadingRules, setIsLoadingRules] = useState(true);
+  const [rulesError, setRulesError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Opening balance form
@@ -66,14 +68,35 @@ export default function SettingsPage() {
   // Booking rule form
   const [newRuleName, setNewRuleName] = useState('');
   const [newRuleVat, setNewRuleVat] = useState<0 | 7 | 19>(0);
+  const [newRuleSKR03, setNewRuleSKR03] = useState('');
+  const [newRuleSKR04, setNewRuleSKR04] = useState('');
   const [editingRule, setEditingRule] = useState<BookingRule | null>(null);
   const [editRuleName, setEditRuleName] = useState('');
   const [editRuleVat, setEditRuleVat] = useState<0 | 7 | 19>(0);
+  const [editRuleSKR03, setEditRuleSKR03] = useState('');
+  const [editRuleSKR04, setEditRuleSKR04] = useState('');
 
   // Year finalization form
   const [selectedFinalizeYear, setSelectedFinalizeYear] = useState<number>(CURRENT_YEAR - 1);
   const [confirmFinalizeYear, setConfirmFinalizeYear] = useState<{ year: number; action: 'finalize' | 'unlock' } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  const fetchRules = async () => {
+    setIsLoadingRules(true);
+    setRulesError(null);
+    try {
+      const res = await bookingRulesApi.getAll();
+      setBookingRules(res.data.data || []);
+    } catch (err: any) {
+      console.error('Failed to load rules:', err);
+      setRulesError(
+        err?.response?.data?.message ||
+          (language === 'de' ? 'Fehler beim Laden der Buchungsregeln' : 'Failed to load booking rules')
+      );
+    } finally {
+      setIsLoadingRules(false);
+    }
+  };
 
   useEffect(() => {
     settingsApi
@@ -92,10 +115,7 @@ export default function SettingsPage() {
         setChartOfAccounts(s.datevChartOfAccounts || 'SKR04');
       })
       .catch(() => {});
-    bookingRulesApi
-      .getAll()
-      .then((res) => setBookingRules(res.data.data))
-      .catch(() => {});
+    fetchRules();
   }, []);
 
   const handleObAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,14 +157,32 @@ export default function SettingsPage() {
     }
   };
 
+  const advisorTrimmed = advisorNum.trim();
+  const advisorParsed = advisorTrimmed ? parseInt(advisorTrimmed, 10) : null;
+  const isAdvisorValid = advisorParsed === null || (!isNaN(advisorParsed) && advisorParsed >= 1001 && advisorParsed <= 9999999 && /^\d+$/.test(advisorTrimmed));
+  const advisorError = advisorTrimmed !== '' && !isAdvisorValid;
+
+  const clientTrimmed = clientNum.trim();
+  const clientParsed = clientTrimmed ? parseInt(clientTrimmed, 10) : null;
+  const isClientValid = clientParsed === null || (!isNaN(clientParsed) && clientParsed >= 1 && clientParsed <= 99999 && /^\d+$/.test(clientTrimmed));
+  const clientError = clientTrimmed !== '' && !isClientValid;
+
   const handleSaveDatev = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
+    if (advisorError) {
+      toast.error(t('advisorNumInvalid'));
+      return;
+    }
+    if (clientError) {
+      toast.error(t('clientNumInvalid'));
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await settingsApi.update({
-        datevAdvisorNumber: advisorNum,
-        datevClientNumber: clientNum,
+        datevAdvisorNumber: advisorNum.trim(),
+        datevClientNumber: clientNum.trim(),
         datevChartOfAccounts: chartOfAccounts,
       });
       setSettings(res.data.data);
@@ -163,10 +201,14 @@ export default function SettingsPage() {
       const res = await bookingRulesApi.create({
         name: newRuleName.trim(),
         defaultVat: newRuleVat,
-      });
+        accountSKR03: newRuleSKR03.trim() || undefined,
+        accountSKR04: newRuleSKR04.trim() || undefined,
+      } as any);
       setBookingRules((prev) => [...prev, res.data.data]);
       setNewRuleName('');
       setNewRuleVat(0);
+      setNewRuleSKR03('');
+      setNewRuleSKR04('');
       toast.success(t('btnAddRule'));
     } catch {
       toast.error(language === 'de' ? 'Fehler beim Hinzufügen' : 'Error adding');
@@ -180,7 +222,9 @@ export default function SettingsPage() {
       const res = await bookingRulesApi.update(editingRule._id, {
         name: editRuleName.trim(),
         defaultVat: editRuleVat,
-      });
+        accountSKR03: editRuleSKR03.trim(),
+        accountSKR04: editRuleSKR04.trim(),
+      } as any);
       setBookingRules((prev) =>
         prev.map((r) => (r._id === editingRule._id ? res.data.data : r))
       );
@@ -289,104 +333,179 @@ export default function SettingsPage() {
       </Section>
 
       {/* Booking Rules */}
-      <Section title={t('secBookingRules')}>
-        <div className="space-y-2">
-          <div className="max-h-80 overflow-y-auto pr-1 sm:pr-2 space-y-2 divide-y divide-slate-100">
-            {bookingRules.map((rule) => (
-              <div
-                key={rule._id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 pt-2.5 first:pt-0"
+      <Section
+        title={`${t('secBookingRules')}${bookingRules.length > 0 ? ` (${bookingRules.length})` : ''}`}
+      >
+        <div className="space-y-3">
+          {isLoadingRules ? (
+            <div className="flex items-center justify-center py-10 text-slate-500 gap-2.5">
+              <Loader2 className="animate-spin text-brand-600" size={20} />
+              <span className="text-xs font-semibold">
+                {language === 'de' ? 'Buchungsregeln werden geladen...' : 'Loading booking rules...'}
+              </span>
+            </div>
+          ) : rulesError ? (
+            <div className="flex items-center justify-between p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
+              <div className="flex items-center gap-2 font-medium">
+                <AlertTriangle size={16} className="flex-shrink-0" />
+                <span>{rulesError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchRules}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
               >
-                {editingRule?._id === rule._id ? (
-                  <form onSubmit={handleEditRule} className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 py-1">
-                    <input
-                      value={editRuleName}
-                      onChange={(e) => setEditRuleName(e.target.value)}
-                      className="flex-1 min-w-[140px] px-3 py-1.5 bg-white border border-brand-500 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
-                      autoFocus
-                    />
-                    {/* VAT Pills for editing rule */}
-                    <div className="flex items-center justify-between sm:justify-start gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
-                      <span className="text-[10px] font-semibold text-slate-500">{t('thVat')}:</span>
-                      {([0, 7, 19] as const).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setEditRuleVat(v)}
-                          className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
-                            editRuleVat === v
-                              ? 'bg-brand-600 text-white shadow-xs'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          {v}%
-                        </button>
-                      ))}
-                      <div className="flex items-center gap-1 ml-1 sm:ml-2">
-                        <button
-                          type="submit"
-                          className="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center"
-                          title={t('btnSave')}
-                        >
-                          <Save size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingRule(null)}
-                          className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs"
-                          title={t('btnCancel')}
-                        >
-                          <X size={13} />
-                        </button>
+                <RefreshCw size={12} />
+                {language === 'de' ? 'Wiederholen' : 'Retry'}
+              </button>
+            </div>
+          ) : bookingRules.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4">
+              <p className="text-xs text-slate-500 font-medium mb-3">
+                {language === 'de'
+                  ? 'Keine Buchungsregeln vorhanden oder initialisiert.'
+                  : 'No booking rules found or initialized.'}
+              </p>
+              <button
+                type="button"
+                onClick={fetchRules}
+                className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-brand transition-colors"
+              >
+                <RefreshCw size={13} />
+                {language === 'de' ? 'Standard-Buchungsregeln laden' : 'Load Standard Booking Rules'}
+              </button>
+            </div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto pr-1 sm:pr-2 space-y-2 divide-y divide-slate-100">
+              {bookingRules.map((rule) => (
+                <div
+                  key={rule._id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 pt-2.5 first:pt-0"
+                >
+                  {editingRule?._id === rule._id ? (
+                    <form onSubmit={handleEditRule} className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 py-1">
+                      {/* Rule number shown read-only during edit */}
+                      {rule.ruleNumber !== undefined && (
+                        <span className="flex-shrink-0 inline-flex items-center px-2 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-extrabold rounded-xl border border-slate-200 tabular-nums select-none" title="Rule number is permanent and cannot be changed">
+                          #{rule.ruleNumber}
+                        </span>
+                      )}
+                      <input
+                        value={editRuleName}
+                        onChange={(e) => setEditRuleName(e.target.value)}
+                        className="flex-1 min-w-[140px] px-3 py-1.5 bg-white border border-brand-500 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
+                        autoFocus
+                      />
+                      {/* Contra account input */}
+                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
+                        <span className="text-[10px] font-semibold text-slate-500">{chartOfAccounts}:</span>
+                        <input
+                          value={chartOfAccounts === 'SKR03' ? editRuleSKR03 : editRuleSKR04}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                            if (chartOfAccounts === 'SKR03') setEditRuleSKR03(val);
+                            else setEditRuleSKR04(val);
+                          }}
+                          placeholder={chartOfAccounts === 'SKR03' ? '1200' : '1800'}
+                          className="w-16 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-900 text-[11px] font-mono text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
+                          title={`${chartOfAccounts} Gegenkonto`}
+                        />
                       </div>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5 w-full">
-                    <span className="text-xs font-semibold text-slate-800 leading-snug">
-                      {translateBookingRuleName(rule.name, language)}
-                    </span>
-                    <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        {rule.defaultVat !== undefined && (
-                          <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 whitespace-nowrap">
-                            {rule.defaultVat}% {t('thVat')}
-                          </span>
-                        )}
-                        {rule.isDefault && (
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
-                            {t('badgeDefaultRule')}
-                          </span>
-                        )}
-                      </div>
-                      {isAdmin && !rule.isDefault && (
-                        <div className="flex items-center gap-1">
+                      {/* VAT Pills for editing rule */}
+                      <div className="flex items-center justify-between sm:justify-start gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
+                        <span className="text-[10px] font-semibold text-slate-500">{t('thVat')}:</span>
+                        {([0, 7, 19] as const).map((v) => (
                           <button
-                            onClick={() => {
-                              setEditingRule(rule);
-                              setEditRuleName(rule.name);
-                              setEditRuleVat(rule.defaultVat ?? 0);
-                            }}
-                            className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                            title={t('btnEdit')}
+                            key={v}
+                            type="button"
+                            onClick={() => setEditRuleVat(v)}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
+                              editRuleVat === v
+                                ? 'bg-brand-600 text-white shadow-xs'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
                           >
-                            <Edit2 size={13} />
+                            {v}%
+                          </button>
+                        ))}
+                        <div className="flex items-center gap-1 ml-1 sm:ml-2">
+                          <button
+                            type="submit"
+                            className="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center"
+                            title={t('btnSave')}
+                          >
+                            <Save size={13} />
                           </button>
                           <button
-                            onClick={() => handleDeleteRule(rule)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title={t('btnDelete')}
+                            type="button"
+                            onClick={() => setEditingRule(null)}
+                            className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs"
+                            title={t('btnCancel')}
                           >
-                            <Trash2 size={13} />
+                            <X size={13} />
                           </button>
                         </div>
-                      )}
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5 w-full">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {rule.ruleNumber !== undefined && (
+                          <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-extrabold rounded-md border border-slate-300 tracking-wide tabular-nums select-none" title="Unique rule number (permanent)">
+                            #{rule.ruleNumber}
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold text-slate-800 leading-snug truncate">
+                          {translateBookingRuleName(rule.name, language)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-medium rounded-md border border-slate-200 whitespace-nowrap" title={`${chartOfAccounts} Gegenkonto`}>
+                            {chartOfAccounts}: {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
+                          </span>
+                          {rule.defaultVat !== undefined && (
+                            <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 whitespace-nowrap">
+                              {rule.defaultVat}% {t('thVat')}
+                            </span>
+                          )}
+                          {rule.isDefault && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
+                              {t('badgeDefaultRule')}
+                            </span>
+                          )}
+                        </div>
+                        {isAdmin && !rule.isDefault && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingRule(rule);
+                                setEditRuleName(rule.name);
+                                setEditRuleVat(rule.defaultVat ?? 0);
+                                setEditRuleSKR03(rule.accountSKR03 || '');
+                                setEditRuleSKR04(rule.accountSKR04 || '');
+                              }}
+                              className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                              title={t('btnEdit')}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRule(rule)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title={t('btnDelete')}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {isAdmin && (
             <form onSubmit={handleAddRule} className="flex flex-col sm:flex-row gap-2.5 pt-4 border-t border-slate-100">
@@ -395,6 +514,17 @@ export default function SettingsPage() {
                 onChange={(e) => setNewRuleName(e.target.value)}
                 placeholder={t('placeholderNewRule')}
                 className="w-full sm:flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+              />
+              <input
+                value={chartOfAccounts === 'SKR03' ? newRuleSKR03 : newRuleSKR04}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                  if (chartOfAccounts === 'SKR03') setNewRuleSKR03(val);
+                  else setNewRuleSKR04(val);
+                }}
+                placeholder={chartOfAccounts === 'SKR03' ? 'Konto (z.B. 1200)' : 'Konto (z.B. 1800)'}
+                className="w-full sm:w-36 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+                title={`${chartOfAccounts} Gegenkonto`}
               />
               <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl flex-1 sm:flex-initial">
@@ -432,22 +562,34 @@ export default function SettingsPage() {
         <Section title={t('secDatev')}>
           <form onSubmit={handleSaveDatev} className="space-y-4">
             <FieldRow label={t('lblAdvisorNum')}>
-              <input
-                type="text"
-                value={advisorNum}
-                onChange={(e) => setAdvisorNum(e.target.value)}
-                placeholder="z.B. 12345"
-                className={inputClass}
-              />
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={advisorNum}
+                  onChange={(e) => setAdvisorNum(e.target.value.replace(/\D/g, ''))}
+                  placeholder="z.B. 1001"
+                  maxLength={7}
+                  className={`${inputClass} ${advisorError ? 'border-rose-400 focus:ring-rose-400/20' : ''}`}
+                />
+                <p className={`text-[11px] ${advisorError ? 'text-rose-600 font-medium' : 'text-slate-500'}`}>
+                  {advisorError ? t('advisorNumInvalid') : t('advisorNumHelp')}
+                </p>
+              </div>
             </FieldRow>
             <FieldRow label={t('lblClientNum')}>
-              <input
-                type="text"
-                value={clientNum}
-                onChange={(e) => setClientNum(e.target.value)}
-                placeholder="z.B. 67890"
-                className={inputClass}
-              />
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={clientNum}
+                  onChange={(e) => setClientNum(e.target.value.replace(/\D/g, ''))}
+                  placeholder="z.B. 10001"
+                  maxLength={5}
+                  className={`${inputClass} ${clientError ? 'border-rose-400 focus:ring-rose-400/20' : ''}`}
+                />
+                <p className={`text-[11px] ${clientError ? 'text-rose-600 font-medium' : 'text-slate-500'}`}>
+                  {clientError ? t('clientNumInvalid') : t('clientNumHelp')}
+                </p>
+              </div>
             </FieldRow>
             <FieldRow label={t('lblChartOfAccounts')}>
               <div className="space-y-2">
@@ -467,9 +609,14 @@ export default function SettingsPage() {
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  {chartOfAccounts === 'SKR04' ? t('descSkr04') : t('descSkr03')}
-                </p>
+                <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <span className="text-xs font-bold px-2 py-0.5 bg-brand-50 text-brand-700 border border-brand-200 rounded-md">
+                    {chartOfAccounts === 'SKR03' ? 'Konto 1600' : 'Konto 1000'}
+                  </span>
+                  <p className="text-[11px] text-slate-600 font-medium">
+                    {chartOfAccounts === 'SKR04' ? t('descSkr04') : t('descSkr03')}
+                  </p>
+                </div>
               </div>
             </FieldRow>
             <div className="flex justify-end pt-2">

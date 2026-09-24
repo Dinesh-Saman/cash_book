@@ -1,5 +1,6 @@
-import { FileText, Edit2, Trash2, Eye } from 'lucide-react';
+import { FileText, Edit2, Trash2, Eye, Download } from 'lucide-react';
 import type { CashBookEntry } from '../../types';
+import { entriesApi } from '../../lib/api';
 import { useTranslation } from '../../store/languageStore';
 import { translateBookingRuleName } from '../../lib/i18n/translations';
 import { cn } from '../../lib/utils';
@@ -19,7 +20,7 @@ interface Props {
 function SkeletonRow() {
   return (
     <tr className="border-b border-slate-100">
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: 11 }).map((_, i) => (
         <td key={i} className="px-4 py-3.5">
           <div className="h-4 bg-slate-200/70 rounded-md animate-pulse" />
         </td>
@@ -33,6 +34,16 @@ const VAT_COLORS: Record<number, string> = {
   7: 'bg-blue-50 text-blue-700 border border-blue-200/80 font-semibold',
   19: 'bg-brand-50 text-brand-700 border border-brand-200/80 font-semibold',
 };
+
+function isEntryClosed(entryDateStr: string): boolean {
+  const d = new Date(entryDateStr);
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  const entryYear = d.getFullYear();
+  const entryMonth = d.getMonth() + 1;
+  return entryYear < curYear || (entryYear === curYear && entryMonth < curMonth);
+}
 
 export default function CashBookTable({
   entries,
@@ -75,10 +86,10 @@ export default function CashBookTable({
             {/* Opening Balance Row */}
             {settings?.openingBalance !== undefined && settings.openingBalance > 0 && (
               <tr className="bg-amber-50/50 hover:bg-amber-50 transition-colors">
+                <td className="px-4 py-3 text-slate-400 text-xs">—</td>
                 <td className="px-4 py-3 text-slate-600 text-xs font-medium">
                   {settings.openingBalanceDate ? formatDate(settings.openingBalanceDate) : '—'}
                 </td>
-                <td className="px-4 py-3 text-slate-400 text-xs">—</td>
                 <td className="px-4 py-3" colSpan={2}>
                   <span className="inline-flex items-center gap-1.5 text-amber-800 font-bold text-xs uppercase tracking-wider">
                     📋 {t('tblOpeningBalance')}
@@ -88,6 +99,7 @@ export default function CashBookTable({
                   {formatCurrency(settings.openingBalance)}
                 </td>
                 <td className="px-4 py-3 text-right text-slate-400">—</td>
+                <td className="px-4 py-3 text-center text-slate-400">—</td>
                 <td className="px-4 py-3 text-center text-slate-400">—</td>
                 <td className="px-4 py-3 text-right font-extrabold text-slate-900 whitespace-nowrap">
                   {formatCurrency(settings.openingBalance)}
@@ -108,7 +120,7 @@ export default function CashBookTable({
             )}
 
             {entries.length === 0 ? (
-              <EmptyState t={t} colSpan={10} />
+              <EmptyState t={t} colSpan={11} />
             ) : (
               entries.map((entry, idx) => (
                 <tr
@@ -122,12 +134,7 @@ export default function CashBookTable({
                       : 'border-l-4 border-l-rose-500'
                   )}
                 >
-                  {/* 1. Date */}
-                  <td className="px-4 py-3.5 text-slate-800 font-medium whitespace-nowrap">
-                    {formatDate(entry.date)}
-                  </td>
-
-                  {/* 2. Voucher No */}
+                  {/* 1. Voucher No */}
                   <td className="px-4 py-3.5 text-slate-600 font-mono text-xs whitespace-nowrap">
                     {entry.voucherNo ? (
                       <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap inline-block">
@@ -136,6 +143,11 @@ export default function CashBookTable({
                     ) : (
                       '—'
                     )}
+                  </td>
+
+                  {/* 2. Date */}
+                  <td className="px-4 py-3.5 text-slate-800 font-medium whitespace-nowrap">
+                    {formatDate(entry.date)}
                   </td>
 
                   {/* 3. Booking Rule */}
@@ -184,7 +196,24 @@ export default function CashBookTable({
                     </span>
                   </td>
 
-                  {/* 8. Running Balance */}
+                  {/* 8. Column H */}
+                  <td className="px-4 py-3.5 text-center text-slate-700 font-mono text-xs whitespace-nowrap">
+                    {(() => {
+                      const val = entry.contraAccount || entry.columnH || 
+                        (typeof entry.bookingRule === 'object' 
+                          ? (entry.bookingRule?.accountSKR04 || entry.bookingRule?.accountSKR03) 
+                          : null);
+                      return val ? (
+                        <span className="bg-slate-100 text-slate-800 font-semibold px-2 py-0.5 rounded border border-slate-200/80">
+                          {val}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      );
+                    })()}
+                  </td>
+
+                  {/* 9. Running Balance */}
                   <td className="px-4 py-3.5 text-right whitespace-nowrap">
                     <span
                       className={cn(
@@ -198,44 +227,72 @@ export default function CashBookTable({
 
                   {/* 9. Document View */}
                   <td className="px-4 py-3.5 text-center">
-                    {entry.documentPath ? (
-                      <button
-                        onClick={() => onViewDocument(entry)}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-medium border border-brand-200/80 transition-colors"
-                        title={entry.documentOriginalName}
-                      >
-                        <Eye size={14} />
-                        <span className="hidden sm:inline">{t('btnViewDoc')}</span>
-                      </button>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
+                    {(() => {
+                      const docCount = entry.documents?.length || (entry.documentPath ? 1 : 0);
+                      return docCount > 0 ? (
+                        <div className="inline-flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => onViewDocument(entry)}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-medium border border-brand-200/80 transition-colors"
+                            title={entry.documents?.map(d => d.originalName).join(', ') || entry.documentOriginalName}
+                          >
+                            <Eye size={14} />
+                            <span className="hidden sm:inline">{t('btnViewDoc')}</span>
+                            {docCount > 1 && (
+                              <span className="bg-brand-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                                {docCount}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              entriesApi.downloadMergedPDF(entry._id, entry.voucherNo);
+                            }}
+                            className="p-1 bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 rounded-lg border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
+                            title={language === 'de' ? 'Beleg als PDF herunterladen' : 'Download invoice as PDF'}
+                          >
+                            <Download size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      );
+                    })()}
                   </td>
 
                   {/* 10. Actions */}
                   <td className="px-4 py-3.5">
-                    {(canEdit || canDelete) && (
-                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                        {canEdit && (
-                          <button
-                            onClick={() => onEdit(entry)}
-                            className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                            title={t('btnEdit')}
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => onDelete(entry)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title={t('btnDelete')}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      const entryIsClosed = isEntryClosed(entry.date);
+                      if (entryIsClosed) {
+                        return <span className="text-slate-300 text-xs select-none">—</span>;
+                      }
+                      return (canEdit || canDelete) ? (
+                        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          {canEdit && (
+                            <button
+                              onClick={() => onEdit(entry)}
+                              className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                              title={t('btnEdit')}
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => onDelete(entry)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title={t('btnDelete')}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs select-none">—</span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))
@@ -258,7 +315,7 @@ export default function CashBookTable({
                 <td className="px-4 py-3.5 text-right font-extrabold text-rose-600 whitespace-nowrap">
                   -{formatCurrency(totalExpense)}
                 </td>
-                <td colSpan={4} />
+                <td colSpan={5} />
               </tr>
             </tfoot>
           )}
@@ -273,6 +330,7 @@ export default function CashBookTable({
             {/* Opening Balance Row */}
             {settings?.openingBalance !== undefined && settings.openingBalance > 0 && (
               <tr className="bg-amber-50/50 hover:bg-amber-50 transition-colors">
+                <td className="px-3.5 py-3 text-slate-400 text-xs">—</td>
                 <td className="px-3.5 py-3 text-slate-600 text-xs font-medium whitespace-nowrap">
                   {settings.openingBalanceDate ? formatDate(settings.openingBalanceDate) : '—'}
                 </td>
@@ -285,7 +343,9 @@ export default function CashBookTable({
                     📋 {t('tblOpeningBalance')}
                   </span>
                 </td>
-                <td className="px-3.5 py-3 text-slate-400 text-xs">—</td>
+                <td className="px-3.5 py-3 text-right font-extrabold text-slate-900 whitespace-nowrap text-xs sm:text-sm">
+                  {formatCurrency(settings.openingBalance)}
+                </td>
                 <td className="px-3.5 py-3 text-center text-slate-400">—</td>
                 <td className="px-3.5 py-3 text-right">
                   {canEdit && onEditOpeningBalance && (
@@ -302,7 +362,7 @@ export default function CashBookTable({
             )}
 
             {entries.length === 0 ? (
-              <EmptyState t={t} colSpan={10} />
+              <EmptyState t={t} colSpan={11} />
             ) : (
               entries.map((entry, idx) => (
                 <tr
@@ -316,12 +376,23 @@ export default function CashBookTable({
                       : 'border-l-4 border-l-rose-500'
                   )}
                 >
-                  {/* 1. Date */}
+                  {/* 1. Voucher No */}
+                  <td className="px-3.5 py-3 text-slate-600 font-mono text-xs whitespace-nowrap">
+                    {entry.voucherNo ? (
+                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap inline-block text-[11px]">
+                        {entry.voucherNo}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+
+                  {/* 2. Date */}
                   <td className="px-3.5 py-3 text-slate-800 font-medium whitespace-nowrap text-xs sm:text-sm">
                     {formatDate(entry.date)}
                   </td>
 
-                  {/* 2. Income */}
+                  {/* 3. Income */}
                   <td className="px-3.5 py-3 text-right whitespace-nowrap">
                     {entry.type === 'income' ? (
                       <span className="font-bold text-emerald-600 whitespace-nowrap text-xs sm:text-sm">
@@ -332,7 +403,7 @@ export default function CashBookTable({
                     )}
                   </td>
 
-                  {/* 3. Expense */}
+                  {/* 4. Expense */}
                   <td className="px-3.5 py-3 text-right whitespace-nowrap">
                     {entry.type === 'expense' ? (
                       <span className="font-bold text-rose-600 whitespace-nowrap text-xs sm:text-sm">
@@ -343,19 +414,19 @@ export default function CashBookTable({
                     )}
                   </td>
 
-                  {/* 4. Booking Rule */}
+                  {/* 5. Booking Rule */}
                   <td className="px-3.5 py-3 text-slate-900 font-medium whitespace-nowrap text-xs sm:text-sm">
                     {typeof entry.bookingRule === 'object'
                       ? translateBookingRuleName(entry.bookingRule?.name, language)
                       : translateBookingRuleName(String(entry.bookingRule), language)}
                   </td>
 
-                  {/* 5. Booking Text */}
+                  {/* 6. Booking Text */}
                   <td className="px-3.5 py-3 text-slate-600 text-xs min-w-[120px]">
                     {entry.bookingText || <span className="text-slate-300">—</span>}
                   </td>
 
-                  {/* 6. VAT */}
+                  {/* 7. VAT */}
                   <td className="px-3.5 py-3 text-center whitespace-nowrap">
                     <span
                       className={cn(
@@ -367,7 +438,24 @@ export default function CashBookTable({
                     </span>
                   </td>
 
-                  {/* 7. Balance */}
+                  {/* 8. Column H */}
+                  <td className="px-3.5 py-3 text-center text-slate-700 font-mono text-xs whitespace-nowrap">
+                    {(() => {
+                      const val = entry.contraAccount || entry.columnH || 
+                        (typeof entry.bookingRule === 'object' 
+                          ? (entry.bookingRule?.accountSKR04 || entry.bookingRule?.accountSKR03) 
+                          : null);
+                      return val ? (
+                        <span className="bg-slate-100 text-slate-800 font-semibold px-2 py-0.5 rounded border border-slate-200/80 text-[11px]">
+                          {val}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      );
+                    })()}
+                  </td>
+
+                  {/* 9. Balance */}
                   <td className="px-3.5 py-3 text-right whitespace-nowrap">
                     <span
                       className={cn(
@@ -379,56 +467,73 @@ export default function CashBookTable({
                     </span>
                   </td>
 
-                  {/* 8. Voucher No (at last before document) */}
-                  <td className="px-3.5 py-3 text-slate-600 font-mono text-xs whitespace-nowrap">
-                    {entry.voucherNo ? (
-                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap inline-block text-[11px]">
-                        {entry.voucherNo}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-
                   {/* 9. Document View */}
                   <td className="px-3.5 py-3 text-center">
-                    {entry.documentPath ? (
-                      <button
-                        onClick={() => onViewDocument(entry)}
-                        className="inline-flex items-center justify-center p-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-medium border border-brand-200/80 transition-colors"
-                        title={entry.documentOriginalName}
-                      >
-                        <Eye size={14} />
-                      </button>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
+                    {(() => {
+                      const docCount = entry.documents?.length || (entry.documentPath ? 1 : 0);
+                      return docCount > 0 ? (
+                        <div className="inline-flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => onViewDocument(entry)}
+                            className="inline-flex items-center justify-center gap-1 p-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-medium border border-brand-200/80 transition-colors"
+                            title={entry.documents?.map(d => d.originalName).join(', ') || entry.documentOriginalName}
+                          >
+                            <Eye size={14} />
+                            {docCount > 1 && (
+                              <span className="bg-brand-600 text-white text-[10px] font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center leading-none">
+                                {docCount}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              entriesApi.downloadMergedPDF(entry._id, entry.voucherNo);
+                            }}
+                            className="p-1.5 bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 rounded-lg text-xs border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
+                            title={language === 'de' ? 'Beleg als PDF herunterladen' : 'Download invoice as PDF'}
+                          >
+                            <Download size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      );
+                    })()}
                   </td>
 
                   {/* 10. Actions */}
                   <td className="px-3.5 py-3">
-                    {(canEdit || canDelete) && (
-                      <div className="flex items-center gap-1">
-                        {canEdit && (
-                          <button
-                            onClick={() => onEdit(entry)}
-                            className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                            title={t('btnEdit')}
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button
-                            onClick={() => onDelete(entry)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title={t('btnDelete')}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      const entryIsClosed = isEntryClosed(entry.date);
+                      if (entryIsClosed) {
+                        return <span className="text-slate-300 text-xs select-none">—</span>;
+                      }
+                      return (canEdit || canDelete) ? (
+                        <div className="flex items-center gap-1">
+                          {canEdit && (
+                            <button
+                              onClick={() => onEdit(entry)}
+                              className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                              title={t('btnEdit')}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => onDelete(entry)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title={t('btnDelete')}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 text-xs select-none">—</span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))
@@ -439,7 +544,10 @@ export default function CashBookTable({
           {entries.length > 0 && (
             <tfoot>
               <tr className="bg-slate-50 border-t-2 border-slate-200">
-                <td className="px-3.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                <td
+                  colSpan={2}
+                  className="px-3.5 py-3 text-slate-600 text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                >
                   {t('tblTotals')}
                 </td>
                 <td className="px-3.5 py-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs sm:text-sm">
@@ -476,13 +584,14 @@ function EmptyState({ t, colSpan }: { t: (key: any) => string; colSpan: number }
 
 function DesktopTableHeader({ t }: { t: (key: any) => string }) {
   const headers = [
-    { key: 'thDate', align: 'text-left' },
     { key: 'thVoucherNo', align: 'text-left' },
+    { key: 'thDate', align: 'text-left' },
     { key: 'thBookingRule', align: 'text-left' },
     { key: 'thBookingText', align: 'text-left' },
     { key: 'thIncome', align: 'text-right' },
     { key: 'thExpense', align: 'text-right' },
     { key: 'thVat', align: 'text-center' },
+    { key: 'thContraAccountColH', align: 'text-center' },
     { key: 'thBalance', align: 'text-right' },
     { key: 'thDocument', align: 'text-center' },
     { key: 'thActions', align: 'text-center' },
@@ -508,16 +617,17 @@ function DesktopTableHeader({ t }: { t: (key: any) => string }) {
 }
 
 function MobileTableHeader({ t }: { t: (key: any) => string }) {
-  // Mobile Order: Date -> Income -> Expense -> Booking Rule -> Booking Text -> VAT -> Balance -> Voucher No -> Document -> Actions
+  // Mobile Order: Voucher No -> Date -> Income -> Expense -> Booking Rule -> Booking Text -> VAT -> Column H -> Balance -> Document -> Actions
   const headers = [
+    { key: 'thVoucherNo', align: 'text-left' },
     { key: 'thDate', align: 'text-left' },
     { key: 'thIncome', align: 'text-right' },
     { key: 'thExpense', align: 'text-right' },
     { key: 'thBookingRule', align: 'text-left' },
     { key: 'thBookingText', align: 'text-left' },
     { key: 'thVat', align: 'text-center' },
+    { key: 'thContraAccountColH', align: 'text-center' },
     { key: 'thBalance', align: 'text-right' },
-    { key: 'thVoucherNo', align: 'text-left' },
     { key: 'thDocument', align: 'text-center' },
     { key: 'thActions', align: 'text-center' },
   ];

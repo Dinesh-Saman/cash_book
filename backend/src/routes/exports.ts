@@ -111,10 +111,12 @@ router.get('/datev', async (req, res, next) => {
   try {
     const { year, month, startDate, endDate } = req.query as Record<string, string>;
     const { entries, settings } = await getEntriesAndSettings(year, month, startDate, endDate);
-    const csv = exportToDatev(entries, settings);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const numYear = year ? Number(year) : undefined;
+    const numMonth = month && month !== 'undefined' ? Number(month) : undefined;
+    const csvBuffer = exportToDatev(entries, settings, numYear, numMonth);
+    res.setHeader('Content-Type', 'text/csv; charset=windows-1252');
     res.setHeader('Content-Disposition', `attachment; filename="EXTF_Kassenbuch_${year || 'export'}_${month || 'gesamt'}.csv"`);
-    res.send(csv);
+    res.send(csvBuffer);
   } catch (error) { next(error); }
 });
 

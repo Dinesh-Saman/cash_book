@@ -8,8 +8,19 @@ const router = Router();
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const { email, username, password } = req.body;
+    const identifier = (email || username || '').trim();
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, message: 'Username/Email and password are required' });
+    }
+
+    const safeRegex = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { name: new RegExp(`^${safeRegex}$`, 'i') }
+      ]
+    });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }

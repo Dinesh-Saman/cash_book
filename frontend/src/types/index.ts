@@ -49,27 +49,53 @@ export interface User {
   permissions?: UserPermissions;
 }
 
+export interface EntryDocument {
+  path: string;
+  originalName: string;
+  mimeType: string;
+}
+
 export interface CashBookEntry {
   _id: string;
   date: string;
   voucherNo: string;
-  bookingRule: { _id: string; name: string };
+  bookingRule: {
+    _id: string;
+    name: string;
+    accountSKR03?: string;
+    accountSKR04?: string;
+    ruleNumber?: number;
+  };
   bookingText: string;
   type: 'income' | 'expense';
   amount: number;
   vatPercentage: 0 | 7 | 19;
   cashBalance: number;
+  /** Contra-account / Column H (Gegenkonto Spalte H in DATEV, e.g. 1800, 1200, 8400) */
+  contraAccount?: string;
+  /** Direct alias for Column H */
+  columnH?: string;
+  /** @deprecated use documents[] */
   documentPath?: string;
+  /** @deprecated use documents[] */
   documentOriginalName?: string;
+  /** All attached documents */
+  documents?: EntryDocument[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface BookingRule {
   _id: string;
+  /** Unique, permanent rule number — auto-assigned, never changes */
+  ruleNumber?: number;
   name: string;
   isDefault: boolean;
   defaultVat?: 0 | 7 | 19;
+  /** Contra-account (Gegenkonto) for SKR03 (e.g. 1200, 8400, 4930) */
+  accountSKR03?: string;
+  /** Contra-account (Gegenkonto) for SKR04 (e.g. 1800, 4400, 6815) */
+  accountSKR04?: string;
 }
 
 export interface Settings {

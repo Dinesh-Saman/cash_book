@@ -3,42 +3,46 @@ import { User } from './models/User';
 import { BookingRule } from './models/BookingRule';
 import { Settings } from './models/Settings';
 
+import { DEFAULT_CONTRA_ACCOUNTS, STANDARD_DEFAULT_RULES } from './constants/defaultContraAccounts';
+
+export { DEFAULT_CONTRA_ACCOUNTS };
+
 export async function runSeeder() {
   const userCount = await User.countDocuments();
-  if (userCount === 0) {
-    const admin = await User.create({
+  let admin = await User.findOne({ role: 'admin' });
+
+  if (userCount === 0 || !admin) {
+    admin = await User.create({
       name: 'Admin',
       email: 'admin@cashbook.com',
       password: 'Admin@1234',
       role: 'admin'
     });
+    console.log('Admin user created.');
+  }
 
-    const defaultRules = [
-      'Cash from Bank (Deposit)',
-      'Cash to Bank (Withdrawal)',
-      'Cash Customer Invoice Receipt',
-      'Supplier Invoice Payment',
-      'Postage / Stamps',
-      'Shipping / Freight 19%',
-      'Office Materials 19%',
-      'Office Materials 7%',
-      'Other Costs 19%',
-      'Other Costs 7%',
-      'Hospitality 19%',
-      'Vehicle (Fuel, Washing) 19%',
-      'Travel Expenses 19%',
-      'Lottery Cash Deposit'
-    ];
-
-    for (const ruleName of defaultRules) {
+  const ruleCount = await BookingRule.countDocuments();
+  if (ruleCount === 0) {
+    let ruleNum = 1;
+    for (const ruleName of STANDARD_DEFAULT_RULES) {
+      const mapping = DEFAULT_CONTRA_ACCOUNTS[ruleName];
       await BookingRule.create({
+        ruleNumber: ruleNum++,
         name: ruleName,
         isDefault: true,
+        defaultVat: mapping?.defaultVat ?? 0,
+        accountSKR03: mapping?.skr03 ?? '1360',
+        accountSKR04: mapping?.skr04 ?? '1360',
         createdBy: admin._id
       });
     }
+    console.log('Default booking rules seeded.');
+  }
 
+  const settingsCount = await Settings.countDocuments();
+  if (settingsCount === 0) {
     await Settings.create({ openingBalance: 0 });
-    console.log('Seeding completed.');
+    console.log('Default settings created.');
   }
 }
+

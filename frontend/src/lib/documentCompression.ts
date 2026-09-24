@@ -1,9 +1,12 @@
 /**
  * Document compression utility
- * Compresses documents exceeding 10 MB without compromising readability or visual quality.
+ * Compresses images exceeding 100 MB before upload, without compromising readability.
+ * PDFs are uploaded as-is (no client-side recompression).
+ *
+ * Download compression (≤200KB) is handled server-side via ?compressed=true&download=true.
  */
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB threshold
+const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB upload threshold
 
 export interface CompressionResult {
   file: File;
@@ -13,9 +16,9 @@ export interface CompressionResult {
 }
 
 /**
- * Compresses an image file if it exceeds the 10 MB threshold.
- * Uses high-resolution canvas scaling (up to 2560px) and 0.85 quality JPEG encoding
- * to preserve crisp text and financial document readability.
+ * Compresses an image file using canvas.
+ * Uses high-resolution scaling (up to 2560px) and iteratively reduces quality
+ * until the file is within the 100 MB upload limit.
  */
 async function compressImageFile(file: File): Promise<File> {
   return new Promise((resolve) => {
@@ -24,7 +27,7 @@ async function compressImageFile(file: File): Promise<File> {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        const maxDimension = 2560; // Ultra-sharp document/receipt resolution
+        const maxDimension = 2560; // Sharp, receipt-quality resolution
 
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
@@ -45,24 +48,21 @@ async function compressImageFile(file: File): Promise<File> {
           return resolve(file);
         }
 
-        // Use high-quality image smoothing
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Export at 0.85 JPEG quality for optimal text legibility and size reduction
+        // Use 0.85 quality JPEG — sufficient for text/financial document legibility
         canvas.toBlob(
           (blob) => {
             if (!blob || blob.size >= file.size) {
               return resolve(file);
             }
-
             const cleanName = file.name.replace(/\.[^/.]+$/, '') + '.jpg';
             const compressedFile = new File([blob], cleanName, {
               type: 'image/jpeg',
               lastModified: Date.now(),
             });
-
             resolve(compressedFile);
           },
           'image/jpeg',
@@ -80,12 +80,13 @@ async function compressImageFile(file: File): Promise<File> {
 }
 
 /**
- * Inspects a document file and reduces its size if it exceeds 10 MB.
+ * Inspects a document file and reduces its size if it exceeds the 100 MB upload limit.
+ * Only images are compressed client-side; PDFs are uploaded as-is.
  */
 export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionResult> {
   const originalSizeBytes = file.size;
 
-  if (file.size <= MAX_FILE_SIZE_BYTES) {
+  if (file.size <= MAX_UPLOAD_SIZE_BYTES) {
     return {
       file,
       wasCompressed: false,
@@ -94,7 +95,7 @@ export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionR
     };
   }
 
-  // File is larger than 10MB
+  // File is larger than 100MB
   const isImage = file.type.startsWith('image/') || /\.(jpe?g|png)$/i.test(file.name);
 
   if (isImage) {
@@ -116,7 +117,7 @@ export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionR
     }
   }
 
-  // Non-image files (e.g. PDF) that cannot be re-rasterized without losing selectable text
+  // PDFs > 100MB: still upload (backend limit allows it); no client-side compression possible
   return {
     file,
     wasCompressed: false,

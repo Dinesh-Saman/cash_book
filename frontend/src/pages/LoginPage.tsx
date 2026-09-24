@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, AlertCircle, Mail, Lock, Sparkles } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
 import { authApi } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
@@ -8,8 +8,11 @@ import LanguageToggle from '../components/ui/LanguageToggle';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@cashbook.com');
+  const [identifier, setIdentifier] = useState(() => {
+    return localStorage.getItem('cashbook_remember_user') || 'admin@cashbook.com';
+  });
   const [password, setPassword] = useState('Admin@1234');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,9 +25,15 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     try {
-      const res = await authApi.login(email, password);
+      if (rememberMe) {
+        localStorage.setItem('cashbook_remember_user', identifier);
+      } else {
+        localStorage.removeItem('cashbook_remember_user');
+      }
+
+      const res = await authApi.login(identifier, password);
       login(res.data.data.user, res.data.data.token);
-      toast.success(t('loginTitle') + ' ✓');
+      toast.success(language === 'de' ? 'Erfolgreich angemeldet ✓' : 'Signed in successfully ✓');
       navigate('/');
     } catch (err: any) {
       if (err?.response?.data?.code === 'ACCOUNT_DISABLED') {
@@ -35,8 +44,8 @@ export default function LoginPage() {
         const msg =
           err?.response?.data?.message ||
           (language === 'de'
-            ? 'Ungültige E-Mail-Adresse oder Passwort'
-            : 'Invalid email or password');
+            ? 'Ungültiger Benutzername/E-Mail oder Passwort'
+            : 'Invalid username/email or password');
         setError(msg);
         toast.error(language === 'de' ? 'Anmeldung fehlgeschlagen' : 'Login failed');
       }
@@ -46,145 +55,182 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-900 flex flex-col justify-center items-center px-4 sm:px-6 relative overflow-hidden select-none">
-      {/* Elegant Multi-layered Mesh Gradient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-[#0f172a] to-[#1e1b4b] pointer-events-none" />
-      
-      {/* Ambient glowing radial orbs */}
-      <div className="absolute -top-32 -left-32 w-[550px] h-[550px] bg-indigo-600/25 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
-      <div className="absolute top-1/2 -right-32 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[130px] pointer-events-none animate-pulse" style={{ animationDuration: '10s' }} />
-      <div className="absolute -bottom-32 left-1/3 w-[450px] h-[450px] bg-blue-600/15 rounded-full blur-[110px] pointer-events-none" />
-
-      {/* Subtle background grid pattern */}
+    <div className="fixed inset-0 h-screen w-screen flex items-center justify-center p-3 sm:p-5 select-none overflow-hidden font-sans">
+      {/* High-Quality Geometric Framing Background Image */}
       <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)`,
-          backgroundSize: '40px 40px',
-        }}
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+        style={{ backgroundImage: `url('/login-bg.png')` }}
       />
 
       {/* Top right language switcher */}
       <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30">
-        <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/60 rounded-xl p-0.5 shadow-lg">
+        <div className="bg-white/90 backdrop-blur-sm border border-slate-200/90 rounded-xl p-0.5 shadow-sm text-slate-800">
           <LanguageToggle />
         </div>
       </div>
 
-      {/* Main Two-Column Card Container */}
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5),0_0_40px_rgba(99,102,241,0.15)] border border-slate-700/30 overflow-hidden relative z-10 grid grid-cols-1 md:grid-cols-2 max-h-[92vh]">
-        {/* Left Side: Visual Hero Image & Product Info */}
-        <div className="relative bg-gradient-to-br from-slate-950 via-[#111827] to-[#1e1b4b] text-white p-6 sm:p-8 flex flex-col justify-between overflow-hidden border-b md:border-b-0 md:border-r border-slate-800">
-          {/* Subtle inner background light */}
-          <div className="absolute -top-20 -left-20 w-60 h-60 bg-indigo-500/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
-
-          {/* Top Brand Info */}
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 text-[11px] font-semibold tracking-wide mb-2.5">
-              <Sparkles size={12} className="text-indigo-400" />
-              <span>Finanzbuchhaltung</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-sm">
-              {t('appName')}
-            </h1>
-            <p className="text-xs sm:text-sm font-semibold text-indigo-300 mt-0.5">
-              {t('appSubtitle')}
-            </p>
-          </div>
-
-          {/* Image Showcase - aligns with the text above */}
-          <div className="w-full flex-1 flex items-center pt-3 pb-1 relative z-10">
-            <div className="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/10 group">
-              <img
-                src="/login-illustration.jpg"
-                alt="Cash Book Finance Management"
-                className="w-full h-auto object-cover transform transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
-            </div>
-          </div>
+      {/* Main Two-Column Card Container - Increased height for optimal visual balance */}
+      <div className="w-full max-w-[850px] h-[455px] sm:h-[460px] max-h-[92vh] bg-white rounded-[24px] shadow-[0_20px_60px_-15px_rgba(15,23,42,0.18),0_4px_16px_rgba(15,23,42,0.06)] overflow-hidden grid grid-cols-1 md:grid-cols-2 relative border border-slate-200/80 z-10">
+        {/* Left Side: Visual Hero Image & Product Branding */}
+        <div className="hidden md:block relative w-full h-full bg-[#081e3a] overflow-hidden select-none">
+          <img
+            src="/login-left-panel.png"
+            alt="CashBook - Cash Book Management System"
+            className="w-full h-full object-cover object-top select-none pointer-events-none"
+          />
         </div>
 
-        {/* Right Side: Sign In Form */}
-        <div className="p-6 sm:p-8 md:p-10 flex flex-col justify-center bg-white overflow-y-auto">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{t('loginTitle')}</h2>
-            <p className="text-xs text-slate-500 mt-1 font-medium">Willkommen zurück • Welcome back</p>
+        {/* Right Side: Sign In Form with tailored, reduced content width */}
+        <div className="p-6 sm:px-10 sm:py-8 flex flex-col justify-center items-center h-full bg-white relative">
+          <div className="w-full max-w-[325px]">
+            {/* Mobile-only Top Brand Header */}
+            <div className="md:hidden flex items-center gap-2 mb-2">
+              <span className="text-xl font-bold text-slate-800 tracking-tight">
+                Cash<span className="text-[#22c55e]">Book</span>
+              </span>
+            </div>
+
+            <div>
+              {/* Welcome Back Header */}
+              <div className="mb-4">
+                <h1 className="text-2xl sm:text-[26px] font-bold text-slate-900 tracking-tight leading-tight">
+                  {language === 'de' ? 'Willkommen zurück' : 'Welcome Back'}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal leading-relaxed">
+                  {language === 'de'
+                    ? 'Melden Sie sich bei Ihrem CashBook-Konto an, um Ihre Finanzen weiter zu verwalten.'
+                    : 'Sign in to your CashBook account to continue managing your finances.'}
+                </p>
+              </div>
+
+              {/* Error Notification */}
+              {error && (
+                <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-150">
+                  <AlertCircle size={15} className="text-rose-600 flex-shrink-0" />
+                  <div className="flex-1 leading-snug">{error}</div>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-3.5">
+                {/* Username / Email Input */}
+                <div>
+                  <div className="relative flex items-center group">
+                    <div className="absolute left-3.5 text-slate-400 group-focus-within:text-[#1451a2] transition-colors pointer-events-none">
+                      <User size={17} strokeWidth={1.75} />
+                    </div>
+                    <input
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => {
+                        setIdentifier(e.target.value);
+                        if (error) setError('');
+                      }}
+                      required
+                      placeholder={language === 'de' ? 'Benutzername / E-Mail' : 'Username / Email'}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-[#1451a2] rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 placeholder-slate-400 shadow-xs transition-all font-normal"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Input */}
+                <div>
+                  <div className="relative flex items-center group">
+                    <div className="absolute left-3.5 text-slate-400 group-focus-within:text-[#1451a2] transition-colors pointer-events-none">
+                      <Lock size={17} strokeWidth={1.75} />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (error) setError('');
+                      }}
+                      required
+                      placeholder={language === 'de' ? 'Passwort' : 'Password'}
+                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-[#1451a2] rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 placeholder-slate-400 shadow-xs transition-all font-normal"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((p) => !p)}
+                      className="absolute right-3 text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <Eye size={17} strokeWidth={1.75} /> : <EyeOff size={17} strokeWidth={1.75} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Remember Me & Forgot Password */}
+                <div className="flex items-center justify-between pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#1451a2] focus:ring-[#1451a2] accent-[#1451a2] cursor-pointer"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-600 font-medium">
+                      {language === 'de' ? 'Angemeldet bleiben' : 'Remember me'}
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toast(
+                        language === 'de'
+                          ? 'Bitte kontaktieren Sie Ihren Administrator zum Zurücksetzen.'
+                          : 'Please contact your system administrator to reset your password.',
+                        { icon: 'ℹ️' }
+                      )
+                    }
+                    className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    {language === 'de' ? 'Passwort vergessen?' : 'Forgot password?'}
+                  </button>
+                </div>
+
+                {/* Sign In Button */}
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2.5 sm:py-3 px-6 bg-[#1451a2] hover:bg-[#0f4285] active:bg-[#0c366e] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-xs transition-all duration-150 disabled:opacity-60 cursor-pointer"
+                  >
+                    <span>
+                      {isLoading
+                        ? language === 'de'
+                          ? 'Anmeldung...'
+                          : 'Signing In...'
+                        : language === 'de'
+                        ? 'Anmelden'
+                        : 'Sign In'}
+                    </span>
+                    <ArrowRight size={17} strokeWidth={2} />
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Bottom Security / Trust & Footer Section - Moved a little bit lower */}
+            <div className="mt-7 sm:mt-8 pt-3.5 border-t border-slate-100 flex flex-col items-center gap-1.5 text-center">
+              <div className="flex items-center justify-center gap-2.5 text-[11px] sm:text-xs text-slate-500 font-medium">
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
+                  <ShieldCheck size={13} className="text-emerald-500" />
+                  {language === 'de' ? 'Gesichert' : 'Encrypted'}
+                </span>
+                <span className="text-slate-300">•</span>
+                <span>DATEV Ready</span>
+                <span className="text-slate-300">•</span>
+                <span>GoBD</span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium tracking-wide">
+                {language === 'de'
+                  ? 'Sicher • Zuverlässig • Immer an Ihrer Seite'
+                  : 'Secure • Reliable • Always with you'}
+              </p>
+            </div>
           </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in duration-150">
-              <AlertCircle size={16} className="text-rose-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{error}</div>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                {t('loginEmailLabel')}
-              </label>
-              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600 transition-colors pointer-events-none">
-                  <Mail size={16} />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (error) setError('');
-                  }}
-                  required
-                  autoComplete="email"
-                  placeholder="admin@cashbook.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-brand-600 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-brand-500/10 placeholder-slate-400 shadow-xs transition-all font-medium"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                {t('loginPasswordLabel')}
-              </label>
-              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600 transition-colors pointer-events-none">
-                  <Lock size={16} />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError('');
-                  }}
-                  required
-                  autoComplete="current-password"
-                  className="w-full pl-10 pr-11 py-2.5 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-brand-600 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-brand-500/10 shadow-xs transition-all font-medium tracking-wide"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg p-1 transition-all"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:from-brand-700 hover:via-indigo-700 hover:to-purple-700 active:scale-[0.99] disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all duration-150 cursor-pointer"
-              >
-                <LogIn size={17} />
-                {isLoading ? t('loginAuthenticating') : t('btnLogin')}
-              </button>
-            </div>
-          </form>
         </div>
       </div>
     </div>

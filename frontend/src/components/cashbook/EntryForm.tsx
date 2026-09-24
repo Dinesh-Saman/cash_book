@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, FileText, AlertTriangle, Calendar, Info, Paperclip } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CashBookEntry, BookingRule } from '../../types';
-import { entriesApi, bookingRulesApi } from '../../lib/api';
+import { entriesApi, bookingRulesApi, settingsApi } from '../../lib/api';
 import { formatDateForInput, formatAmountWithCommas, parseFormattedAmount } from '../../lib/utils';
 import { useTranslation } from '../../store/languageStore';
 import { translateBookingRuleName } from '../../lib/i18n/translations';
@@ -46,10 +46,17 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
         : String(entry!.bookingRule)
       : ''
   );
+  const [contraAccount, setContraAccount] = useState(
+    isEdit ? (entry?.contraAccount || entry?.columnH || '') : ''
+  );
+  const [activeChart, setActiveChart] = useState<'SKR03' | 'SKR04'>('SKR04');
   const [bookingText, setBookingText] = useState(isEdit ? entry!.bookingText : '');
   const [amount, setAmount] = useState(isEdit ? formatAmountWithCommas(String(entry!.amount)) : '');
   const [vat, setVat] = useState<0 | 7 | 19>(isEdit ? entry!.vatPercentage : 0);
-  const [file, setFile] = useState<File | null>(null);
+  /** New files selected in this session */
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  /** Paths of existing docs the user wants to remove (edit mode) */
+  const [removedPaths, setRemovedPaths] = useState<Set<string>>(new Set());
   const [bookingRules, setBookingRules] = useState<BookingRule[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balanceWarning, setBalanceWarning] = useState<string | null>(null);
@@ -62,16 +69,59 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
 
   const isIncome = type === 'income';
 
+  // Existing docs in edit mode
+  const existingDocs = isEdit
+    ? [
+        ...(entry!.documents || []),
+        ...(entry!.documentPath && !(entry!.documents || []).some((d: any) => d.path === entry!.documentPath)
+          ? [{ path: entry!.documentPath!, originalName: entry!.documentOriginalName || entry!.documentPath!, mimeType: 'application/octet-stream' }]
+          : []),
+      ]
+    : [];
+  const activeExistingCount = existingDocs.filter((d: any) => !removedPaths.has(d.path)).length;
+  const totalFilesCount = activeExistingCount + newFiles.length;
+  const isMaxFilesReached = totalFilesCount >= 10;
+
   useEffect(() => {
+    settingsApi
+      .get()
+      .then((res) => {
+        const s = res.data?.data;
+        if (s?.datevChartOfAccounts) {
+          setActiveChart(s.datevChartOfAccounts);
+        }
+      })
+      .catch(() => {});
+
     bookingRulesApi
       .getAll()
-      .then((res) => setBookingRules(res.data.data))
+      .then((res) => {
+        const rules: BookingRule[] = res.data.data;
+        setBookingRules(rules);
+        if (isEdit && !entry?.contraAccount && !entry?.columnH) {
+          const ruleId = typeof entry!.bookingRule === 'object' ? entry!.bookingRule._id : String(entry!.bookingRule);
+          const r = rules.find((x) => x._id === ruleId);
+          if (r) {
+            setContraAccount(activeChart === 'SKR03' ? (r.accountSKR03 || '1360') : (r.accountSKR04 || '1360'));
+          }
+        }
+      })
       .catch(() => {});
     entriesApi
       .getSummary()
       .then((res) => setCurrentBalance(res.data.data.currentBalance))
       .catch(() => {});
-  }, []);
+    if (!isEdit) {
+      entriesApi
+        .getNextVoucherNo()
+        .then((res) => {
+          if (res.data?.data?.nextVoucherNo) {
+            setVoucherNo(res.data.data.nextVoucherNo);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isEdit]);
 
   useEffect(() => {
     setIsHistorical(date < today);
@@ -125,7 +175,13 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
     }
     setBookingRuleId(ruleId);
     const rule = bookingRules.find((r) => r._id === ruleId);
-    if (rule) setVat(getAutoVat(rule));
+    if (rule) {
+      setVat(getAutoVat(rule));
+      const autoAccount = activeChart === 'SKR03'
+        ? (rule.accountSKR03 || rule.accountSKR04 || '1360')
+        : (rule.accountSKR04 || rule.accountSKR03 || '1360');
+      setContraAccount(autoAccount);
+    }
   };
 
   const handleAddNewRule = async () => {
@@ -149,42 +205,77 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawFile = e.target.files?.[0];
-    if (!rawFile) {
-      setFile(null);
+    const rawSelected = Array.from(e.target.files || []);
+    if (rawSelected.length === 0) return;
+    // Reset the input so the same file can be re-added after removal
+    e.target.value = '';
+
+    const remainingSlots = Math.max(0, 10 - activeExistingCount - newFiles.length);
+
+    if (remainingSlots <= 0) {
+      toast.error(
+        language === 'de'
+          ? 'Maximal 10 Dateien erlaubt. Sie haben bereits 10 Dateien ausgewählt.'
+          : 'Maximum 10 files allowed. You already have 10 files selected.'
+      );
       return;
     }
 
-    if (rawFile.size > 10 * 1024 * 1024) {
-      const toastId = toast.loading(
+    let selected = rawSelected;
+    if (selected.length > remainingSlots) {
+      selected = selected.slice(0, remainingSlots);
+      toast(
         language === 'de'
-          ? 'Dokumentgröße wird optimiert (> 10 MB)...'
-          : 'Optimizing document size (> 10 MB)...'
+          ? `Maximal 10 Dateien erlaubt. Es wurden nur die ersten ${remainingSlots} Datei(en) übernommen.`
+          : `Maximum 10 files allowed. Only the first ${remainingSlots} file(s) were included.`,
+        { icon: 'ℹ️' }
       );
-      try {
-        const { file: optimizedFile, wasCompressed, originalSizeBytes, compressedSizeBytes } =
-          await optimizeDocumentIfNeeded(rawFile);
-        if (wasCompressed) {
-          const origMB = (originalSizeBytes / (1024 * 1024)).toFixed(1);
-          const compMB = (compressedSizeBytes / (1024 * 1024)).toFixed(1);
-          toast.success(
-            language === 'de'
-              ? `Dateigröße optimiert (${origMB} MB → ${compMB} MB)`
-              : `Document size optimized (${origMB} MB → ${compMB} MB)`,
-            { id: toastId }
-          );
-          setFile(optimizedFile);
-        } else {
-          toast.dismiss(toastId);
-          setFile(optimizedFile);
-        }
-      } catch {
-        toast.dismiss(toastId);
-        setFile(rawFile);
-      }
-    } else {
-      setFile(rawFile);
     }
+
+    const toAdd: File[] = [];
+    for (const rawFile of selected) {
+      if (rawFile.size > 100 * 1024 * 1024) {
+        toast.error(
+          language === 'de'
+            ? `"${rawFile.name}" ist zu groß. Max. 100 MB pro Datei.`
+            : `"${rawFile.name}" exceeds 100 MB limit.`
+        );
+        continue;
+      }
+      if (rawFile.size > 10 * 1024 * 1024) {
+        const toastId = toast.loading(
+          language === 'de' ? `"${rawFile.name}" wird optimiert…` : `Optimizing "${rawFile.name}"…`
+        );
+        try {
+          const { file: optimized, wasCompressed, originalSizeBytes, compressedSizeBytes } =
+            await optimizeDocumentIfNeeded(rawFile);
+          if (wasCompressed) {
+            const origMB = (originalSizeBytes / 1024 / 1024).toFixed(1);
+            const compMB = (compressedSizeBytes / 1024 / 1024).toFixed(1);
+            toast.success(
+              language === 'de'
+                ? `Optimiert: ${origMB} MB → ${compMB} MB`
+                : `Optimized: ${origMB} MB → ${compMB} MB`,
+              { id: toastId }
+            );
+            toAdd.push(optimized);
+          } else {
+            toast.dismiss(toastId);
+            toAdd.push(optimized);
+          }
+        } catch {
+          toast.dismiss(toastId);
+          toAdd.push(rawFile);
+        }
+      } else {
+        toAdd.push(rawFile);
+      }
+    }
+    setNewFiles((prev) => {
+      const combined = [...prev, ...toAdd];
+      const maxAllowed = Math.max(0, 10 - activeExistingCount);
+      return combined.slice(0, maxAllowed);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,7 +300,17 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       fd.append('type', type);
       fd.append('amount', String(numAmount));
       fd.append('vatPercentage', String(vat));
-      if (file) fd.append('document', file);
+      fd.append('contraAccount', contraAccount.trim());
+      fd.append('columnH', contraAccount.trim());
+
+      // Append new files under the field name "documents" (strictly max 10 total)
+      const allowedNewCount = Math.max(0, 10 - activeExistingCount);
+      newFiles.slice(0, allowedNewCount).forEach((f) => fd.append('documents', f));
+
+      // In edit mode, tell the backend which existing docs to remove
+      if (isEdit && removedPaths.size > 0) {
+        fd.append('removeDocumentPaths', Array.from(removedPaths).join(','));
+      }
 
       if (isEdit) {
         await entriesApi.updateEntry(entry!._id, fd);
@@ -232,7 +333,7 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  };;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-4">
@@ -332,94 +433,112 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
             {/* Voucher No */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t('lblVoucherNo')} <span className="text-slate-400 font-normal text-[11px]">({language === 'de' ? 'optional' : 'optional'})</span>
+                {t('lblVoucherNo')}
               </label>
               <input
                 type="text"
                 value={voucherNo}
-                onChange={(e) => setVoucherNo(e.target.value)}
+                disabled
+                readOnly
                 placeholder={t('placeholderVoucherNo')}
-                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 placeholder-slate-400 shadow-xs"
+                title={language === 'de' ? 'Automatisch fortlaufende Belegnummer (nicht editierbar)' : 'Auto-incrementing voucher number (read-only)'}
+                className="w-full px-3.5 py-2 bg-slate-100/90 border border-slate-200 rounded-xl text-slate-600 text-sm font-mono cursor-not-allowed select-none shadow-xs"
               />
             </div>
           </div>
 
-          {/* Row 2: Booking Rule (Full Width) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {t('lblBookingRule')} <span className="text-rose-500">*</span>
-            </label>
-            {showAddRule ? (
-              <div className="space-y-2 p-2.5 bg-brand-50/40 border border-brand-200 rounded-xl animate-in fade-in zoom-in-95 duration-100">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newRuleName}
-                    onChange={(e) => setNewRuleName(e.target.value)}
-                    placeholder={t('placeholderNewRule')}
-                    className="flex-1 px-3.5 py-2 bg-white border border-brand-400 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddNewRule}
-                    className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-                  >
-                    {t('btnAdd')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddRule(false)}
-                    className="p-2 bg-white hover:bg-slate-100 text-slate-500 rounded-xl text-xs transition-colors border border-slate-200"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                {/* VAT Selection for New Rule */}
-                <div className="flex items-center justify-between pt-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-600">{t('thVat')}:</span>
-                    <div className="flex gap-1">
-                      {([0, 7, 19] as const).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setNewRuleVat(v)}
-                          className={cn(
-                            'px-2.5 py-0.5 rounded-lg text-xs font-bold transition-all',
-                            newRuleVat === v
-                              ? 'bg-brand-600 text-white shadow-xs'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                          )}
-                        >
-                          {v}%
-                        </button>
-                      ))}
-                    </div>
+          {/* Row 2: Booking Rule & Contra Account (Column H) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t('lblBookingRule')} <span className="text-rose-500">*</span>
+              </label>
+              {showAddRule ? (
+                <div className="space-y-2 p-2.5 bg-brand-50/40 border border-brand-200 rounded-xl animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newRuleName}
+                      onChange={(e) => setNewRuleName(e.target.value)}
+                      placeholder={t('placeholderNewRule')}
+                      className="flex-1 px-3.5 py-2 bg-white border border-brand-400 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddNewRule}
+                      className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                    >
+                      {t('btnAdd')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddRule(false)}
+                      className="p-2 bg-white hover:bg-slate-100 text-slate-500 rounded-xl text-xs transition-colors border border-slate-200"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    {language === 'en' ? 'Default VAT for rule' : 'Standard-MwSt.'}
-                  </span>
+                  {/* VAT Selection for New Rule */}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600">{t('thVat')}:</span>
+                      <div className="flex gap-1">
+                        {([0, 7, 19] as const).map((v) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setNewRuleVat(v)}
+                            className={cn(
+                              'px-2.5 py-0.5 rounded-lg text-xs font-bold transition-all',
+                              newRuleVat === v
+                                ? 'bg-brand-600 text-white shadow-xs'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            )}
+                          >
+                            {v}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      {language === 'en' ? 'Default VAT for rule' : 'Standard-MwSt.'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <select
-                value={bookingRuleId}
-                onChange={(e) => handleRuleChange(e.target.value)}
-                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
-                required
-              >
-                <option value="">{t('selectBookingRulePlaceholder')}</option>
-                {bookingRules.map((r) => (
-                  <option key={r._id} value={r._id}>
-                    {translateBookingRuleName(r.name, language)}
+              ) : (
+                <select
+                  value={bookingRuleId}
+                  onChange={(e) => handleRuleChange(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+                  required
+                >
+                  <option value="">{t('selectBookingRulePlaceholder')}</option>
+                  {bookingRules.map((r) => (
+                    <option key={r._id} value={r._id}>
+                      {r.ruleNumber !== undefined ? `${r.ruleNumber}. ` : ''}{translateBookingRuleName(r.name, language)}
+                    </option>
+                  ))}
+                  <option value="__add_new__" className="text-brand-600 font-semibold">
+                    {t('addNewBookingRuleOption')}
                   </option>
-                ))}
-                <option value="__add_new__" className="text-brand-600 font-semibold">
-                  {t('addNewBookingRuleOption')}
-                </option>
-              </select>
-            )}
+                </select>
+              )}
+            </div>
+
+            {/* Column H: Contra Account (Gegenkonto) */}
+            <div className="sm:col-span-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {t('lblContraAccountColH')}
+              </label>
+              <input
+                type="text"
+                value={contraAccount}
+                onChange={(e) => setContraAccount(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+                title={t('helpContraAccountColH')}
+              />
+            </div>
           </div>
 
           {/* Row 3: Booking Text (Full Width) */}
@@ -490,76 +609,152 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          {/* Row 5: Document Upload Drop Zone (Horizontal Card) */}
+          {/* Row 5: Document Upload */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {t('lblUploadDoc')}
-            </label>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-between px-3.5 py-2 bg-slate-50 hover:bg-brand-50/40 border border-slate-200 hover:border-brand-300 rounded-xl cursor-pointer transition-all group"
-            >
-              {file ? (
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
-                      <FileText size={16} />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                {t('lblUploadDoc')}
+                <span className="ml-1 text-slate-400 font-normal">
+                  ({language === 'de' ? 'bis zu 10 Dateien, je max. 100 MB' : 'up to 10 files, 100 MB each'})
+                </span>
+              </label>
+              <span className={cn(
+                "text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors",
+                totalFilesCount >= 10
+                  ? "bg-rose-100 text-rose-700"
+                  : totalFilesCount > 0
+                  ? "bg-brand-50 text-brand-700"
+                  : "text-slate-400"
+              )}>
+                {totalFilesCount}/10 {language === 'de' ? 'Dateien' : 'files'}
+              </span>
+            </div>
+
+            {/* Existing docs in edit mode */}
+            {isEdit && existingDocs.length > 0 && (
+              <div className="mb-2 space-y-1">
+                <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-1">
+                  {language === 'de' ? 'Vorhandene Dokumente' : 'Existing documents'}
+                </p>
+                {existingDocs.map((doc: any) => {
+                  const isRemoved = removedPaths.has(doc.path);
+                  return (
+                    <div
+                      key={doc.path}
+                      className={cn(
+                        'flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all',
+                        isRemoved
+                          ? 'bg-rose-50 border-rose-200 opacity-60 line-through text-rose-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-700'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText size={13} className={isRemoved ? 'text-rose-400' : 'text-brand-500'} />
+                        <span className="truncate font-medium">{doc.originalName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemovedPaths((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(doc.path)) next.delete(doc.path);
+                            else next.add(doc.path);
+                            return next;
+                          });
+                        }}
+                        className={cn(
+                          'ml-2 flex-shrink-0 p-1 rounded-lg transition-colors text-xs font-semibold',
+                          isRemoved
+                            ? 'text-brand-600 hover:bg-brand-50'
+                            : 'text-rose-500 hover:bg-rose-50'
+                        )}
+                        title={isRemoved ? (language === 'de' ? 'Wiederherstellen' : 'Restore') : (language === 'de' ? 'Entfernen' : 'Remove')}
+                      >
+                        {isRemoved ? (language === 'de' ? 'Wiederherstellen' : 'Restore') : <X size={13} />}
+                      </button>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate max-w-xs">{file.name}</p>
-                      <p className="text-[10px] text-emerald-600 font-medium">
-                        {language === 'de' ? 'Bereit zum Hochladen' : 'Ready to upload'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFile(null);
-                    }}
-                    className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-white transition-colors"
+                  );
+                })}
+              </div>
+            )}
+
+            {/* New files list */}
+            {newFiles.length > 0 && (
+              <div className="mb-2 space-y-1">
+                <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-1">
+                  {language === 'de' ? 'Neue Dateien' : 'New files'} ({newFiles.length})
+                </p>
+                {newFiles.map((f, idx) => (
+                  <div
+                    key={`${f.name}-${idx}`}
+                    className="flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs"
                   >
-                    <X size={15} />
-                  </button>
-                </div>
-              ) : entry?.documentOriginalName ? (
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0">
-                      <FileText size={16} />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={13} className="text-emerald-600 flex-shrink-0" />
+                      <span className="truncate font-medium text-slate-800">{f.name}</span>
+                      <span className="text-[10px] text-emerald-600 flex-shrink-0">
+                        {(f.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate max-w-xs">{entry.documentOriginalName}</p>
-                      <p className="text-[10px] text-slate-400">{t('uploadSelectNew')}</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewFiles((prev) => prev.filter((_, i) => i !== idx))}
+                      className="ml-2 flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
-                  <span className="text-xs font-semibold text-brand-600 group-hover:underline">
-                    {language === 'de' ? 'Ändern' : 'Change'}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2.5 text-slate-600">
-                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-brand-600 shadow-2xs">
-                      <Paperclip size={15} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700 group-hover:text-brand-700">
-                        {t('uploadDragDrop')}
-                      </p>
-                      <p className="text-[10px] text-slate-400">PDF, JPG, PNG {language === 'de' ? '(Auto-optimiert > 10 MB)' : '(Auto-optimized > 10 MB)'}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-brand-600 group-hover:text-brand-700 bg-white border border-slate-200 px-3 py-1 rounded-lg shadow-2xs group-hover:border-brand-200 transition-colors">
-                    {language === 'de' ? 'Datei wählen' : 'Browse'}
-                  </span>
-                </>
+                ))}
+              </div>
+            )}
+
+            {/* Add files button */}
+            <div
+              onClick={() => {
+                if (isMaxFilesReached) {
+                  toast.error(
+                    language === 'de'
+                      ? 'Maximal 10 Dateien erreicht. Entfernen Sie eine Datei, um eine andere hinzuzufügen.'
+                      : 'Maximum 10 files reached. Remove a file to add another.'
+                  );
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className={cn(
+                "flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-dashed transition-all group",
+                isMaxFilesReached
+                  ? "bg-slate-100 border-slate-300 opacity-60 cursor-not-allowed"
+                  : "bg-slate-50 hover:bg-brand-50/40 border-slate-300 hover:border-brand-400 cursor-pointer"
               )}
+            >
+              <div className="flex items-center gap-2.5 text-slate-600">
+                <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 group-hover:text-brand-600 shadow-2xs">
+                  <Paperclip size={15} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 group-hover:text-brand-700">
+                    {isMaxFilesReached
+                      ? (language === 'de' ? 'Maximal 10 Dateien erreicht' : 'Maximum 10 files reached')
+                      : (language === 'de' ? 'Dateien hinzufügen' : 'Add files')}
+                  </p>
+                  <p className="text-[10px] text-slate-400">PDF, JPG, PNG · {language === 'de' ? 'Max. 100 MB pro Datei' : 'Max 100 MB per file'}</p>
+                </div>
+              </div>
+              <span className={cn(
+                "text-xs font-semibold px-3 py-1 rounded-lg shadow-2xs transition-colors",
+                isMaxFilesReached
+                  ? "bg-slate-200 text-slate-500 border border-slate-300"
+                  : "text-brand-600 group-hover:text-brand-700 bg-white border border-slate-200 group-hover:border-brand-200"
+              )}>
+                {language === 'de' ? 'Durchsuchen' : 'Browse'}
+              </span>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
+                multiple
+                disabled={isMaxFilesReached}
                 className="hidden"
                 onChange={handleFileChange}
               />

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
+import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 import AppLayout from './components/layout/AppLayout';
 
 import LoginPage from './pages/LoginPage';
@@ -26,6 +27,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
+  useInactivityTimeout();
 
   useEffect(() => {
     checkAuth();
