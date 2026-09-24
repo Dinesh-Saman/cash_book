@@ -38,7 +38,7 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET || 'secret';
+    const secret = process.env.JWT_SECRET || 'cashbook_super_secret_jwt_key_2026';
     const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any;
     const token = jwt.sign({ id: user._id }, secret, { expiresIn });
 

@@ -14,7 +14,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { id: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'cashbook_super_secret_jwt_key_2026') as { id: string };
 
     const user = await User.findById(decoded.id);
     if (!user || !user.isActive) {

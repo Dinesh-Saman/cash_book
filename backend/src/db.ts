@@ -1,8 +1,9 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || '';
+const DEFAULT_MONGODB_URI = 'mongodb+srv://saman2020al_db_user:51LZND7cHAFL58kr@cluster0.q4pwqlo.mongodb.net/cashbook?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
 
 let isConnected = false;
 
