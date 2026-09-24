@@ -270,201 +270,73 @@ interface PageItem {
  */
 export async function buildMergedPdf(
   items: DocumentItem[],
-  targetTotalKB?: number
+  _targetTotalKB?: number
 ): Promise<Buffer> {
   const { PDFDocument } = await getPdfLib();
 
   if (items.length === 0) {
     const emptyPdf = await PDFDocument.create();
-    emptyPdf.addPage([595, 842]);
-    const bytes = await emptyPdf.save();
-    return Buffer.from(bytes as any);
+    emptyPdf.addPage([595.28, 841.89]);
+    return Buffer.from(await emptyPdf.save());
   }
 
-  // Dynamic limit based on uploaded document count:
-  // If uploaded documents > 5 (between 5 and 10), dynamically increase limit to < 500 KB (target ceiling 470 KB, hard limit 495 KB).
-  // If <= 5 documents, strictly enforce < 200 KB (target ceiling 185 KB, hard limit 198 KB).
-  const isLargeBatch = items.length > 5;
-  const effectiveTargetKB = isLargeBatch ? DYNAMIC_TARGET_5_TO_10_KB : (targetTotalKB || MAX_TARGET_KB);
-  const effectiveHardLimitBytes = isLargeBatch ? DYNAMIC_HARD_LIMIT_5_TO_10_BYTES : HARD_LIMIT_BYTES;
-
-  // Fast path: if all items are PDFs and total raw size is already within target, preserve 100% native vector
-  const allPdfs = items.every(
-    item => item.mimeType === 'application/pdf' || /\.pdf$/i.test(item.originalName)
-  );
-  const totalRawBytes = items.reduce((sum, item) => sum + item.buffer.length, 0);
-
-  if (allPdfs && totalRawBytes <= effectiveTargetKB * 1024) {
-    try {
-      const mergedPdf = await PDFDocument.create();
-      for (const item of items) {
-        const srcDoc = await PDFDocument.load(item.buffer, { ignoreEncryption: true });
-        const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
-        pages.forEach((p: any) => mergedPdf.addPage(p));
-      }
-      const saved = await mergedPdf.save({ useObjectStreams: true });
-      if (saved.length <= effectiveTargetKB * 1024) {
-        return Buffer.from(saved as any);
-      }
-    } catch {}
+  // Fast path: if single PDF, return directly with 0 conversion overhead
+  if (items.length === 1 && (items[0].mimeType === 'application/pdf' || /\.pdf$/i.test(items[0].originalName))) {
+    return items[0].buffer;
   }
 
   try {
-    const mupdf = await getMuPDF();
-    const sharp = await getSharp();
-    const allPages: PageItem[] = [];
+    const mergedPdf = await PDFDocument.create();
 
     for (const item of items) {
       const isPdf = item.mimeType === 'application/pdf' || /\.pdf$/i.test(item.originalName);
+      const isPng = item.mimeType === 'image/png' || /\.png$/i.test(item.originalName) || (item.buffer.length > 2 && item.buffer[0] === 0x89 && item.buffer[1] === 0x50);
+      const isJpg = item.mimeType === 'image/jpeg' || item.mimeType === 'image/jpg' || /\.(jpe?g)$/i.test(item.originalName) || (item.buffer.length > 2 && item.buffer[0] === 0xff && item.buffer[1] === 0xd8);
 
       if (isPdf) {
         try {
-          const mupdfDoc = mupdf.Document.openDocument(item.buffer, 'application/pdf');
-          const count = mupdfDoc.countPages();
-          for (let i = 0; i < count; i++) {
-            const page = mupdfDoc.loadPage(i);
-            const bounds = page.getBounds();
-            allPages.push({
-              type: 'pdf-page',
-              mupdfDoc,
-              pageIndex: i,
-              width: bounds[2] - bounds[0],
-              height: bounds[3] - bounds[1],
-            });
-          }
+          const srcDoc = await PDFDocument.load(item.buffer, { ignoreEncryption: true });
+          const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+          pages.forEach((page: any) => mergedPdf.addPage(page));
         } catch (pdfErr) {
-          console.error('Error loading PDF with MuPDF:', pdfErr);
+          console.error('Error copying PDF pages:', pdfErr);
         }
-      } else {
+      } else if (isPng || isJpg) {
         try {
-          let width = 595;
-          let height = 842;
-          if (sharp) {
-            const meta = await sharp(item.buffer).metadata();
-            width = meta.width || 595;
-            height = meta.height || 842;
-          }
-          allPages.push({
-            type: 'image',
-            imageBuffer: item.buffer,
-            width,
-            height,
-          });
+          const embedded = isPng 
+            ? await mergedPdf.embedPng(item.buffer) 
+            : await mergedPdf.embedJpg(item.buffer);
+
+          const pageWidth = 595.28;
+          const pageHeight = 841.89;
+          const margin = 20;
+          const availW = pageWidth - margin * 2;
+          const availH = pageHeight - margin * 2;
+          const scale = Math.min(availW / embedded.width, availH / embedded.height, 1);
+          const w = embedded.width * scale;
+          const h = embedded.height * scale;
+          const x = margin + (availW - w) / 2;
+          const y = margin + (availH - h) / 2;
+
+          const page = mergedPdf.addPage([pageWidth, pageHeight]);
+          page.drawImage(embedded, { x, y, width: w, height: h });
         } catch (imgErr) {
-          console.error('Error reading image with Sharp:', imgErr);
+          console.error('Error embedding image into PDF:', imgErr);
         }
       }
     }
 
-    if (allPages.length === 0) {
-      const emptyPdf = await PDFDocument.create();
-      emptyPdf.addPage([595, 842]);
-      return Buffer.from(await emptyPdf.save());
+    if (mergedPdf.getPageCount() === 0) {
+      mergedPdf.addPage([595.28, 841.89]);
     }
 
-    const strategy = getPageStrategy(allPages.length, effectiveTargetKB);
-
-    const renderUnifiedPdf = async (strat: PageStrategy): Promise<Buffer> => {
-      const newPdf = await PDFDocument.create();
-      const currScale = strat.dpi / 72;
-
-      for (const pageItem of allPages) {
-        let jpgBuf: Buffer;
-
-        if (pageItem.type === 'pdf-page') {
-          const page = pageItem.mupdfDoc.loadPage(pageItem.pageIndex!);
-          const pixmap = page.toPixmap(
-            mupdf.Matrix.scale(currScale, currScale),
-            strat.grayscale ? mupdf.ColorSpace.DeviceGray : mupdf.ColorSpace.DeviceRGB,
-            false
-          );
-          const pngBytes = Buffer.from(pixmap.asPNG());
-
-          if (sharp) {
-            let pipeline = sharp(pngBytes).resize({
-              width: strat.maxDim,
-              height: strat.maxDim,
-              fit: 'inside',
-              withoutEnlargement: true,
-            });
-
-            if (strat.grayscale) {
-              pipeline = pipeline.grayscale();
-            }
-
-            jpgBuf = await pipeline
-              .jpeg({
-                quality: strat.quality,
-                mozjpeg: true,
-                chromaSubsampling: strat.chroma,
-              })
-              .toBuffer();
-          } else {
-            jpgBuf = pngBytes;
-          }
-        } else {
-          if (sharp) {
-            let pipeline = sharp(pageItem.imageBuffer!).rotate().resize({
-              width: strat.maxDim,
-              height: strat.maxDim,
-              fit: 'inside',
-              withoutEnlargement: true,
-            });
-
-            if (strat.grayscale) {
-              pipeline = pipeline.grayscale();
-            }
-
-            jpgBuf = await pipeline
-              .jpeg({
-                quality: strat.quality,
-                mozjpeg: true,
-                chromaSubsampling: strat.chroma,
-              })
-              .toBuffer();
-          } else {
-            jpgBuf = pageItem.imageBuffer!;
-          }
-        }
-
-        const isPng = jpgBuf[0] === 0x89 && jpgBuf[1] === 0x50;
-        const embedded = isPng ? await newPdf.embedPng(jpgBuf) : await newPdf.embedJpg(jpgBuf);
-        const pageW = pageItem.width || 595;
-        const pageH = pageItem.height || 842;
-        const pdfPage = newPdf.addPage([pageW, pageH]);
-        pdfPage.drawImage(embedded, {
-          x: 0,
-          y: 0,
-          width: pageW,
-          height: pageH,
-        });
-      }
-
-      const bytes = await newPdf.save({ useObjectStreams: true });
-      return Buffer.from(bytes as any);
-    };
-
-    let result = await renderUnifiedPdf(strategy);
-
-    // Hard limit safeguard
-    if (result.length > effectiveHardLimitBytes) {
-      const tighterStrategy: PageStrategy = {
-        dpi: Math.max(72, Math.floor(strategy.dpi * 0.8)),
-        maxDim: Math.max(650, Math.floor(strategy.maxDim * 0.78)),
-        quality: Math.max(35, strategy.quality - 15),
-        chroma: '4:2:0',
-        grayscale: isLargeBatch ? false : true,
-      };
-      result = await renderUnifiedPdf(tighterStrategy);
-    }
-
-    return result;
+    const saved = await mergedPdf.save({ useObjectStreams: true });
+    return Buffer.from(saved as any);
   } catch (err) {
     console.error('Error building merged PDF:', err);
     try {
-      const { PDFDocument } = await getPdfLib();
       const emptyPdf = await PDFDocument.create();
-      emptyPdf.addPage([595, 842]);
+      emptyPdf.addPage([595.28, 841.89]);
       return Buffer.from(await emptyPdf.save());
     } catch {
       return Buffer.from('');

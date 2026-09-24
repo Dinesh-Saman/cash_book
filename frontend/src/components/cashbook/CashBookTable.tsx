@@ -1,4 +1,6 @@
-import { FileText, Edit2, Trash2, Eye, Download } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Edit2, Trash2, Eye, Download, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import type { CashBookEntry } from '../../types';
 import { entriesApi } from '../../lib/api';
 import { useTranslation } from '../../store/languageStore';
@@ -57,6 +59,23 @@ export default function CashBookTable({
   canDelete = canEdit,
 }: Props) {
   const { t, formatCurrency, formatDate, language } = useTranslation();
+  const [downloadingEntryId, setDownloadingEntryId] = useState<string | null>(null);
+
+  const handleDownloadPDF = async (e: React.MouseEvent, entryId: string, voucherNo?: string) => {
+    e.stopPropagation();
+    if (downloadingEntryId) return;
+    setDownloadingEntryId(entryId);
+    const toastId = toast.loading(language === 'de' ? 'PDF wird vorbereitet...' : 'Preparing PDF...');
+    try {
+      await entriesApi.downloadMergedPDF(entryId, voucherNo);
+      toast.success(language === 'de' ? 'PDF heruntergeladen' : 'PDF downloaded', { id: toastId });
+    } catch (err) {
+      console.error('PDF download error:', err);
+      toast.error(language === 'de' ? 'Fehler beim Herunterladen des PDF' : 'Failed to download PDF', { id: toastId });
+    } finally {
+      setDownloadingEntryId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -245,14 +264,16 @@ export default function CashBookTable({
                             )}
                           </button>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              entriesApi.downloadMergedPDF(entry._id, entry.voucherNo);
-                            }}
-                            className="p-1 bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 rounded-lg border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
+                            onClick={(e) => handleDownloadPDF(e, entry._id, entry.voucherNo)}
+                            disabled={downloadingEntryId === entry._id}
+                            className="p-1 bg-slate-100 hover:bg-brand-50 disabled:opacity-50 text-slate-600 hover:text-brand-700 rounded-lg border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
                             title={language === 'de' ? 'Beleg als PDF herunterladen' : 'Download invoice as PDF'}
                           >
-                            <Download size={13} />
+                            {downloadingEntryId === entry._id ? (
+                              <Loader2 size={13} className="animate-spin text-brand-600" />
+                            ) : (
+                              <Download size={13} />
+                            )}
                           </button>
                         </div>
                       ) : (
@@ -486,14 +507,16 @@ export default function CashBookTable({
                             )}
                           </button>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              entriesApi.downloadMergedPDF(entry._id, entry.voucherNo);
-                            }}
-                            className="p-1.5 bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 rounded-lg text-xs border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
+                            onClick={(e) => handleDownloadPDF(e, entry._id, entry.voucherNo)}
+                            disabled={downloadingEntryId === entry._id}
+                            className="p-1.5 bg-slate-100 hover:bg-brand-50 disabled:opacity-50 text-slate-600 hover:text-brand-700 rounded-lg text-xs border border-slate-200 hover:border-brand-300 transition-colors inline-flex items-center justify-center"
                             title={language === 'de' ? 'Beleg als PDF herunterladen' : 'Download invoice as PDF'}
                           >
-                            <Download size={13} />
+                            {downloadingEntryId === entry._id ? (
+                              <Loader2 size={13} className="animate-spin text-brand-600" />
+                            ) : (
+                              <Download size={13} />
+                            )}
                           </button>
                         </div>
                       ) : (

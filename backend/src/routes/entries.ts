@@ -178,18 +178,16 @@ router.get('/:id/merged-pdf', async (req: any, res, next) => {
       });
     }
 
-    const isLargeBatch = docs.length > 5;
-    const targetKB = isLargeBatch ? DYNAMIC_TARGET_5_TO_10_KB : MAX_TARGET_KB;
-    const maxLimitBytes = isLargeBatch ? 500000 : 200000;
+    if (items.length === 0) {
+      return res.status(404).json({ success: false, message: 'Attached documents could not be loaded' });
+    }
 
-    const pdfBuffer = await buildMergedPdf(items, targetKB);
+    const pdfBuffer = await buildMergedPdf(items);
     const filename = `Voucher_${entry.voucherNo || entry._id}_Invoice.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
-    res.setHeader('X-Document-Compressed', 'true');
-    res.setHeader('X-Max-Size-Limit', maxLimitBytes.toString());
     res.setHeader('X-Document-Count', docs.length.toString());
     res.end(pdfBuffer);
   } catch (error) { next(error); }

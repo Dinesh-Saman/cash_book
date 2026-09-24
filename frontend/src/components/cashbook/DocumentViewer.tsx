@@ -48,6 +48,7 @@ export default function DocumentViewer({ entry, onClose }: Props) {
   const docs = getDocuments(entry);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [isMergingPDF, setIsMergingPDF] = useState(false);
+  const [isDownloadingSingle, setIsDownloadingSingle] = useState(false);
 
   const selected = docs[selectedIdx];
   if (!selected) return null;
@@ -61,15 +62,49 @@ export default function DocumentViewer({ entry, onClose }: Props) {
 
   const handleMergedPDF = async () => {
     setIsMergingPDF(true);
+    const toastId = toast.loading(language === 'de' ? 'PDF wird vorbereitet...' : 'Preparing PDF...');
     try {
       await entriesApi.downloadMergedPDF(entry._id, entry.voucherNo);
       toast.success(
-        language === 'de' ? 'Zusammengeführtes PDF heruntergeladen' : 'Merged PDF downloaded'
+        language === 'de' ? 'Zusammengeführtes PDF heruntergeladen' : 'Merged PDF downloaded',
+        { id: toastId }
       );
-    } catch {
-      toast.error(language === 'de' ? 'Fehler beim Erstellen des PDF' : 'Failed to generate merged PDF');
+    } catch (err) {
+      console.error('Merged PDF download error:', err);
+      toast.error(language === 'de' ? 'Fehler beim Erstellen des PDF' : 'Failed to generate merged PDF', { id: toastId });
     } finally {
       setIsMergingPDF(false);
+    }
+  };
+
+  const handleDownloadSingle = async () => {
+    if (isDownloadingSingle) return;
+    setIsDownloadingSingle(true);
+    const toastId = toast.loading(language === 'de' ? 'Datei wird heruntergeladen...' : 'Downloading file...');
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = selected.originalName || 'document';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(language === 'de' ? 'Datei heruntergeladen' : 'File downloaded', { id: toastId });
+    } catch (e) {
+      console.error('Download error:', e);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = selected.originalName || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.dismiss(toastId);
+    } finally {
+      setIsDownloadingSingle(false);
     }
   };
 
@@ -115,15 +150,17 @@ export default function DocumentViewer({ entry, onClose }: Props) {
 
             {/* Download selected individual document (only if more than 1 doc) */}
             {docs.length > 1 && (
-              <a
-                href={downloadUrl}
-                download={selected.originalName}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-xs transition-colors"
+              <button
+                onClick={handleDownloadSingle}
+                disabled={isDownloadingSingle}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 shadow-xs transition-colors"
                 title={language === 'de' ? 'Aktuelle Datei herunterladen' : 'Download selected file'}
               >
                 <Download size={13} />
-                {language === 'de' ? 'Einzeldatei' : 'Single File'}
-              </a>
+                {isDownloadingSingle
+                  ? (language === 'de' ? 'Lädt…' : 'Downloading…')
+                  : (language === 'de' ? 'Einzeldatei' : 'Single File')}
+              </button>
             )}
 
             <button
