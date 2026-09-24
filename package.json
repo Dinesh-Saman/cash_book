@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "vercel-build": "npm run build --prefix frontend",
-    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "vercel-build": "npm run build --prefix frontend && node -e \"const fs = require('fs'); fs.cpSync('frontend/dist', 'dist', { recursive: true }); fs.cpSync('frontend/dist', 'dist/frontend', { recursive: true });\"",
+    "build": "npm run build --prefix frontend && node -e \"const fs = require('fs'); fs.cpSync('frontend/dist', 'dist', { recursive: true }); fs.cpSync('frontend/dist', 'dist/frontend', { recursive: true });\" && npm run build --prefix backend",
     "start": "npm run start --prefix backend"
   },
   "dependencies": {
