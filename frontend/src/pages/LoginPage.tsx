@@ -56,10 +56,14 @@ export default function LoginPage() {
 
   return (
     <div className="fixed inset-0 h-screen w-screen flex items-center justify-center p-3 sm:p-5 select-none overflow-hidden font-sans">
-      {/* High-Quality Geometric Framing Background Image */}
+      {/* High-Quality Geometric Framing Background Image: Desktop & Mobile Portrait */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none hidden sm:block"
         style={{ backgroundImage: `url('/login-bg.png')` }}
+      />
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none block sm:hidden"
+        style={{ backgroundImage: `url('/login-bg-mobile.png')` }}
       />
 
       {/* Top right language switcher */}
