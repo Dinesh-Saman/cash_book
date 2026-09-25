@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, FileText, AlertTriangle, Calendar, Info, Paperclip } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CashBookEntry, BookingRule } from '../../types';
-import { entriesApi, bookingRulesApi, settingsApi } from '../../lib/api';
+import { entriesApi, bookingRulesApi } from '../../lib/api';
 import { formatDateForInput, formatAmountWithCommas, parseFormattedAmount } from '../../lib/utils';
 import { useTranslation } from '../../store/languageStore';
 import { translateBookingRuleName } from '../../lib/i18n/translations';
@@ -50,7 +50,6 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
   const [contraAccount, setContraAccount] = useState(
     isEdit ? (entry?.contraAccount || entry?.columnH || '') : ''
   );
-  const [activeChart, setActiveChart] = useState<'SKR03' | 'SKR04'>('SKR04');
   const [bookingText, setBookingText] = useState(isEdit ? entry!.bookingText : '');
   const [amount, setAmount] = useState(isEdit ? formatAmountWithCommas(String(entry!.amount)) : '');
   const [vat, setVat] = useState<0 | 7 | 19>(isEdit ? entry!.vatPercentage : 0);
@@ -84,28 +83,11 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
   const isMaxFilesReached = totalFilesCount >= 10;
 
   useEffect(() => {
-    settingsApi
-      .get()
-      .then((res) => {
-        const s = res.data?.data;
-        if (s?.datevChartOfAccounts) {
-          setActiveChart(s.datevChartOfAccounts);
-        }
-      })
-      .catch(() => {});
-
     bookingRulesApi
       .getAll()
       .then((res) => {
         const rules: BookingRule[] = res.data.data;
         setBookingRules(rules);
-        if (isEdit && !entry?.contraAccount && !entry?.columnH) {
-          const ruleId = typeof entry!.bookingRule === 'object' ? entry!.bookingRule._id : String(entry!.bookingRule);
-          const r = rules.find((x) => x._id === ruleId);
-          if (r) {
-            setContraAccount(activeChart === 'SKR03' ? (r.accountSKR03 || '1360') : (r.accountSKR04 || '1360'));
-          }
-        }
       })
       .catch(() => {});
     entriesApi
@@ -178,10 +160,6 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
     const rule = bookingRules.find((r) => r._id === ruleId);
     if (rule) {
       setVat(getAutoVat(rule));
-      const autoAccount = activeChart === 'SKR03'
-        ? (rule.accountSKR03 || rule.accountSKR04 || '1360')
-        : (rule.accountSKR04 || rule.accountSKR03 || '1360');
-      setContraAccount(autoAccount);
     }
   };
 

@@ -10,7 +10,14 @@
     {
       "src": "api/index.ts",
       "use": "@vercel/node",
-      "config": { "maxDuration": 30, "memory": 1024 }
+      "config": {
+        "maxDuration": 30,
+        "memory": 1024,
+        "includeFiles": [
+          "node_modules/mupdf/**",
+          "backend/node_modules/mupdf/**"
+        ]
+      }
     }
   ],
   "routes": [

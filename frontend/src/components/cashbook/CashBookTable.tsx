@@ -218,10 +218,7 @@ export default function CashBookTable({
                   {/* 8. Column H */}
                   <td className="px-4 py-3.5 text-center text-slate-700 font-mono text-xs whitespace-nowrap">
                     {(() => {
-                      const val = entry.contraAccount || entry.columnH || 
-                        (typeof entry.bookingRule === 'object' 
-                          ? (entry.bookingRule?.accountSKR04 || entry.bookingRule?.accountSKR03) 
-                          : null);
+                      const val = entry.contraAccount || entry.columnH;
                       return val ? (
                         <span className="bg-slate-100 text-slate-800 font-semibold px-2 py-0.5 rounded border border-slate-200/80">
                           {val}
@@ -462,10 +459,7 @@ export default function CashBookTable({
                   {/* 8. Column H */}
                   <td className="px-3.5 py-3 text-center text-slate-700 font-mono text-xs whitespace-nowrap">
                     {(() => {
-                      const val = entry.contraAccount || entry.columnH || 
-                        (typeof entry.bookingRule === 'object' 
-                          ? (entry.bookingRule?.accountSKR04 || entry.bookingRule?.accountSKR03) 
-                          : null);
+                      const val = entry.contraAccount || entry.columnH;
                       return val ? (
                         <span className="bg-slate-100 text-slate-800 font-semibold px-2 py-0.5 rounded border border-slate-200/80 text-[11px]">
                           {val}

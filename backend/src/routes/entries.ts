@@ -8,7 +8,7 @@ import { authenticate } from '../middleware/auth';
 import { validateExpense, recalculateBalancesFrom, getCurrentBalance } from '../services/balanceService';
 import { logAction } from '../services/auditService';
 import { getDocumentStream, saveDocumentToGridFS } from '../services/documentStorage';
-import { buildMergedPdf, DocumentItem, MAX_TARGET_KB, DYNAMIC_TARGET_5_TO_10_KB } from '../services/documentCompression';
+import { buildMergedPdf, compressSingleDocumentBuffer, DocumentItem, MAX_TARGET_KB, DYNAMIC_TARGET_5_TO_10_KB } from '../services/documentCompression';
 
 import crypto from 'crypto';
 import path from 'path';
@@ -48,13 +48,15 @@ export function isMonthClosed(year: number, month: number): boolean {
 }
 
 /**
- * Save a multer file buffer to GridFS and return { path, originalName, mimeType }.
+ * Compress and save a multer file buffer to GridFS and return { path, originalName, mimeType }.
  */
 async function saveFile(file: Express.Multer.File) {
-  const ext = path.extname(file.originalname) || '';
+  const compressed = await compressSingleDocumentBuffer(file.buffer, file.originalname, file.mimetype);
+  const isJpegOut = compressed.contentType === 'image/jpeg' && file.mimetype !== 'application/pdf';
+  const ext = isJpegOut ? '.jpg' : (path.extname(file.originalname) || '');
   const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
-  await saveDocumentToGridFS(generatedFilename, file.buffer, file.mimetype, file.originalname);
-  return { path: generatedFilename, originalName: file.originalname, mimeType: file.mimetype };
+  await saveDocumentToGridFS(generatedFilename, compressed.buffer, compressed.contentType, file.originalname);
+  return { path: generatedFilename, originalName: file.originalname, mimeType: compressed.contentType };
 }
 
 /**
@@ -280,17 +282,8 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
       }
     }
 
-    // Resolve Contra Account / Column H
-    let resolvedAccount = String(contraAccount || columnH || '').trim();
-    if (!resolvedAccount && bookingRule) {
-      try {
-        const ruleDoc = await BookingRule.findById(bookingRule);
-        if (ruleDoc) {
-          const isSKR03 = settings.datevChartOfAccounts === 'SKR03';
-          resolvedAccount = isSKR03 ? (ruleDoc.accountSKR03 || '1360') : (ruleDoc.accountSKR04 || '1360');
-        }
-      } catch {}
-    }
+    // Resolve Contra Account / Column H (keep empty unless explicitly entered)
+    const resolvedAccount = String(contraAccount || columnH || '').trim();
 
     // Support pre-uploaded documents (from individual/chunked upload)
     let preUploadedDocs: { path: string; originalName: string; mimeType: string }[] = [];
@@ -423,14 +416,6 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
     let resolvedAccount = entry.contraAccount || entry.columnH || '';
     if (contraAccount !== undefined || columnH !== undefined) {
       resolvedAccount = String(contraAccount || columnH || '').trim();
-    } else if (!resolvedAccount && bookingRule) {
-      try {
-        const ruleDoc = await BookingRule.findById(bookingRule);
-        if (ruleDoc) {
-          const isSKR03 = settings.datevChartOfAccounts === 'SKR03';
-          resolvedAccount = isSKR03 ? (ruleDoc.accountSKR03 || '1360') : (ruleDoc.accountSKR04 || '1360');
-        }
-      } catch {}
     }
 
     Object.assign(entry, {

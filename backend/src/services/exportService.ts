@@ -137,7 +137,7 @@ export function exportToPDF(
     e.type === 'income' ? `+${e.amount.toFixed(2)}` : '',
     e.type === 'expense' ? `-${e.amount.toFixed(2)}` : '',
     `${e.vatPercentage}%`,
-    e.contraAccount || e.columnH || (e.bookingRule as any)?.accountSKR04 || (e.bookingRule as any)?.accountSKR03 || '—',
+    e.contraAccount || e.columnH || '—',
     e.cashBalance.toFixed(2),
     e.documentOriginalName || (e.documentPath ? t.docAvailable : '—')
   ]);
@@ -364,7 +364,7 @@ export async function exportToExcel(
 
   // Table Data Rows
   for (const e of entries) {
-    const contraVal = e.contraAccount || e.columnH || (e.bookingRule as any)?.accountSKR04 || (e.bookingRule as any)?.accountSKR03 || '';
+    const contraVal = e.contraAccount || e.columnH || '';
     const row = worksheet.addRow([
       format(new Date(e.date), 'dd.MM.yyyy'),
       e.voucherNo || '',
@@ -415,7 +415,7 @@ export function exportToXML(entries: ICashBookEntry[], reportTitle: string): str
       .ele('Date').txt(format(new Date(e.date), 'dd.MM.yyyy')).up()
       .ele('VoucherNo').txt(e.voucherNo || '').up()
       .ele('BookingRule').txt((e.bookingRule as any)?.name || '').up()
-      .ele('ContraAccount').txt(e.contraAccount || e.columnH || (e.bookingRule as any)?.accountSKR04 || (e.bookingRule as any)?.accountSKR03 || '').up()
+      .ele('ContraAccount').txt(e.contraAccount || e.columnH || '').up()
       .ele('BookingText').txt(e.bookingText || '').up()
       .ele('Type').txt(e.type).up()
       .ele('Income').txt(e.type === 'income' ? e.amount.toFixed(2) : '').up()
@@ -636,17 +636,8 @@ export function exportToDatev(
     row[6] = cashAccount;
 
     // 7: Gegenkonto (ohne BU-Schlüssel) - Field 8 / Column H in DATEV
-    let contraAccount = (e.contraAccount || e.columnH || '').trim();
-    if (!contraAccount) {
-      const rule = e.bookingRule as any;
-      contraAccount = isSKR03 ? rule?.accountSKR03 : rule?.accountSKR04;
-      if (!contraAccount) {
-        const ruleName = rule?.name || '';
-        const defaultMapping = DEFAULT_CONTRA_ACCOUNTS[ruleName];
-        contraAccount = isSKR03 ? defaultMapping?.skr03 : defaultMapping?.skr04;
-      }
-    }
-    row[7] = contraAccount || '1360';
+    const contraAccount = (e.contraAccount || e.columnH || '').trim();
+    row[7] = contraAccount;
 
     // 9: Belegdatum (TTMM)
     row[9] = format(new Date(e.date), 'ddMM');

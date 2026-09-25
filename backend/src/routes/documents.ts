@@ -6,13 +6,8 @@ import { getDocumentStream, saveDocumentToGridFS } from '../services/documentSto
 import { UploadChunk } from '../models/UploadChunk';
 import { authenticate } from '../middleware/auth';
 import {
-  compressImageToTargetKB,
-  compressPdfToTargetKB,
-  getPdfPageCount,
-  MAX_TARGET_KB,
+  compressSingleDocumentBuffer,
   HARD_LIMIT_BYTES,
-  DYNAMIC_TARGET_5_TO_10_KB,
-  DYNAMIC_HARD_LIMIT_5_TO_10_BYTES,
 } from '../services/documentCompression';
 
 const upload = multer({
@@ -22,8 +17,8 @@ const upload = multer({
 
 const router = Router();
 
-// Fast in-memory cache for compressed download buffers
-const compressedDownloadCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
+// Fast in-memory cache for compressed document buffers
+const compressedDownloadCache = new Map<string, { buffer: Buffer; contentType: string; originalName: string; timestamp: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export async function serveDocument(req: any, res: any) {
@@ -35,17 +30,16 @@ export async function serveDocument(req: any, res: any) {
     }
 
     const isDownload = req.query.download === 'true' || req.query.download === '1';
-    const isCompressedReq = req.query.compressed === 'true' || req.query.compressed === '1';
-    const cacheKey = `${filename}_dl_${isDownload ? '1' : '0'}`;
+    const dispositionType = isDownload ? 'attachment' : 'inline';
+    const cacheKey = filename;
 
     // Check fast cache
     if (compressedDownloadCache.has(cacheKey)) {
       const cached = compressedDownloadCache.get(cacheKey)!;
       if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        const dispositionType = isDownload ? 'attachment' : 'inline';
-        const safeAscii = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
+        const safeAscii = cached.originalName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
         res.setHeader('Content-Type', cached.contentType);
-        res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+        res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(cached.originalName)}`);
         res.setHeader('Content-Length', cached.buffer.length);
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -61,12 +55,11 @@ export async function serveDocument(req: any, res: any) {
       return res.status(404).json({ success: false, message: 'Document not found' });
     }
 
-    const dispositionType = isDownload ? 'attachment' : 'inline';
     const safeAscii = doc.originalName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
     let contentType = doc.contentType;
 
-    // If inline preview without download request and document is reasonably sized, pipe directly
-    if (!isDownload && !isCompressedReq && doc.length && doc.length < 2 * 1024 * 1024) {
+    // Only pipe directly if the stored file is already strictly within the 200 KB hard limit
+    if (doc.length && doc.length <= HARD_LIMIT_BYTES) {
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(doc.originalName)}`);
       res.setHeader('Accept-Ranges', 'bytes');
@@ -76,49 +69,36 @@ export async function serveDocument(req: any, res: any) {
       return doc.stream.pipe(res);
     }
 
-    // Read full buffer to apply compression rules on downloaded/large files
+    // Read full buffer to apply strict compression rules:
+    // - <= 5 pages: strictly < 200 KB
+    // - > 5 pages: strictly < 500 KB
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
       doc.stream.on('data', (c: Buffer) => chunks.push(c));
       doc.stream.on('end', resolve);
       doc.stream.on('error', reject);
     });
-    let buffer: any = Buffer.concat(chunks);
+    const rawBuffer = Buffer.concat(chunks);
 
-    const ext = (path.extname(doc.originalName || filename) || '').replace('.', '').toLowerCase();
-    const isImage = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) || contentType.startsWith('image/');
-    const isPdf = ext === 'pdf' || contentType === 'application/pdf' || (buffer.length > 4 && buffer[0] === 0x25 && buffer[1] === 0x50);
+    const compressed = await compressSingleDocumentBuffer(
+      rawBuffer,
+      doc.originalName || filename,
+      contentType
+    );
+    const buffer = compressed.buffer;
+    contentType = compressed.contentType;
 
-    // Apply strict file download limits:
-    // - <= 5 pages: strictly < 200 KB
-    // - > 5 pages: strictly < 500 KB
-    if (isDownload || isCompressedReq || buffer.length > HARD_LIMIT_BYTES) {
-      if (isImage) {
-        // Single image = 1 page (<= 5 pages) -> strictly < 200 KB
-        if (buffer.length > HARD_LIMIT_BYTES) {
-          const comp = await compressImageToTargetKB(buffer, contentType, MAX_TARGET_KB);
-          buffer = comp.buffer;
-          contentType = comp.contentType;
-        }
-      } else if (isPdf) {
-        const pageCount = await getPdfPageCount(buffer);
-        const isUnder5 = pageCount <= 5;
-        const targetKB = isUnder5 ? MAX_TARGET_KB : DYNAMIC_TARGET_5_TO_10_KB;
-        const hardLimit = isUnder5 ? HARD_LIMIT_BYTES : DYNAMIC_HARD_LIMIT_5_TO_10_BYTES;
-
-        if (buffer.length > hardLimit) {
-          buffer = await compressPdfToTargetKB(buffer, targetKB, pageCount);
-          contentType = 'application/pdf';
-        }
-      }
-
-      // Cache the compressed buffer
-      if (compressedDownloadCache.size > 200) {
-        const oldestKey = compressedDownloadCache.keys().next().value;
-        if (oldestKey) compressedDownloadCache.delete(oldestKey);
-      }
-      compressedDownloadCache.set(cacheKey, { buffer, contentType, timestamp: Date.now() });
+    // Cache the compressed buffer
+    if (compressedDownloadCache.size > 200) {
+      const oldestKey = compressedDownloadCache.keys().next().value;
+      if (oldestKey) compressedDownloadCache.delete(oldestKey);
     }
+    compressedDownloadCache.set(cacheKey, {
+      buffer,
+      contentType,
+      originalName: doc.originalName || filename,
+      timestamp: Date.now(),
+    });
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(doc.originalName)}`);
@@ -143,15 +123,21 @@ router.post('/upload', authenticate, upload.single('file'), async (req: any, res
     if (!file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
-    const ext = path.extname(file.originalname) || '';
+    const compressed = await compressSingleDocumentBuffer(
+      file.buffer,
+      file.originalname,
+      file.mimetype
+    );
+    const isJpegOut = compressed.contentType === 'image/jpeg' && file.mimetype !== 'application/pdf';
+    const ext = isJpegOut ? '.jpg' : (path.extname(file.originalname) || '');
     const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
-    await saveDocumentToGridFS(generatedFilename, file.buffer, file.mimetype, file.originalname);
+    await saveDocumentToGridFS(generatedFilename, compressed.buffer, compressed.contentType, file.originalname);
     res.json({
       success: true,
       data: {
         path: generatedFilename,
         originalName: file.originalname,
-        mimeType: file.mimetype,
+        mimeType: compressed.contentType,
       },
     });
   } catch (error) {
@@ -187,11 +173,14 @@ router.post('/upload-chunk', authenticate, upload.single('chunk'), async (req: a
       const allChunks = await UploadChunk.find({ uploadId }).sort({ chunkIndex: 1 });
       const fullBuffer = Buffer.concat(allChunks.map((c) => c.data));
       const origName = filename || file.originalname || 'document.pdf';
-      const ext = path.extname(origName) || '';
-      const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
       const resolvedMime = mimeType || file.mimetype || 'application/pdf';
 
-      await saveDocumentToGridFS(generatedFilename, fullBuffer, resolvedMime, origName);
+      const compressed = await compressSingleDocumentBuffer(fullBuffer, origName, resolvedMime);
+      const isJpegOut = compressed.contentType === 'image/jpeg' && resolvedMime !== 'application/pdf';
+      const ext = isJpegOut ? '.jpg' : (path.extname(origName) || '');
+      const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
+
+      await saveDocumentToGridFS(generatedFilename, compressed.buffer, compressed.contentType, origName);
       await UploadChunk.deleteMany({ uploadId });
 
       return res.json({
@@ -199,7 +188,7 @@ router.post('/upload-chunk', authenticate, upload.single('chunk'), async (req: a
         data: {
           path: generatedFilename,
           originalName: origName,
-          mimeType: resolvedMime,
+          mimeType: compressed.contentType,
         },
       });
     }
