@@ -32,13 +32,12 @@ router.use(authenticate);
 
 export async function getNextVoucherNumber(): Promise<string> {
   const entries = await CashBookEntry.find({ isDeleted: false }, { voucherNo: 1 }).lean();
-  const numericVouchers = entries
-    .map((e) => String(e.voucherNo || '').trim())
-    .filter((v) => /^\d+$/.test(v))
-    .map(Number);
-
-  if (numericVouchers.length === 0) return '1';
-  return String(Math.max(...numericVouchers) + 1);
+  let max = 0;
+  for (let i = 0; i < entries.length; i++) {
+    const v = Number(entries[i].voucherNo);
+    if (!isNaN(v) && v > max) max = v;
+  }
+  return String(max + 1);
 }
 
 export function isMonthClosed(year: number, month: number): boolean {
@@ -332,13 +331,13 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
     });
 
     await recalculateBalancesFrom(entryDate);
-    await logAction({
+    logAction({
       action: 'CREATE',
       entityType: 'entry',
       entityId: entry._id.toString(),
-      description: `Created ${type} entry ${finalVoucherNo} (€ ${numAmount.toFixed(2)}) with ${savedDocs.length} document(s)`,
+      description: `Created ${type} entry ${finalVoucherNo} (€ ${numAmount.toFixed(2)}) with ${allSavedDocs.length} document(s)`,
       performedBy: req.user._id
-    });
+    }).catch(err => console.error('logAction CREATE error:', err));
 
     res.json({ success: true, data: entry });
   } catch (error) { next(error); }
@@ -455,13 +454,13 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
 
     await entry.save();
     await recalculateBalancesFrom(newDate < oldDate ? newDate : oldDate);
-    await logAction({
+    logAction({
       action: 'UPDATE',
       entityType: 'entry',
       entityId: entry._id.toString(),
       description: `Updated entry ${voucherNo || ''} (€ ${Number(amount).toFixed(2)}), ${allDocs.length} document(s)`,
       performedBy: req.user._id
-    });
+    }).catch(err => console.error('logAction UPDATE error:', err));
 
     res.json({ success: true, data: entry });
   } catch (error) { next(error); }
@@ -493,13 +492,13 @@ router.delete('/:id', async (req: any, res, next) => {
     await entry.save();
 
     await recalculateBalancesFrom(entry.date);
-    await logAction({
+    logAction({
       action: 'DELETE',
       entityType: 'entry',
       entityId: entry._id.toString(),
       description: `Deleted entry ${entry.voucherNo || ''}`,
       performedBy: req.user._id
-    });
+    }).catch(err => console.error('logAction DELETE error:', err));
 
     res.json({ success: true, data: entry });
   } catch (error) { next(error); }

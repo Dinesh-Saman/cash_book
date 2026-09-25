@@ -298,29 +298,29 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
 
     setIsSubmitting(true);
     try {
-      // Upload any new files safely (individual / chunked) so no single request exceeds Vercel's 4.5 MB limit
+      // Upload any new files safely in parallel so uploading finishes much faster
       const allowedNewCount = Math.max(0, 10 - activeExistingCount);
       const filesToUpload = newFiles.slice(0, allowedNewCount);
-      const uploadedDocs: UploadedDocumentRef[] = [];
+      let uploadedDocs: UploadedDocumentRef[] = [];
 
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
+      if (filesToUpload.length > 0) {
         const toastId = toast.loading(
           language === 'de'
-            ? `Dokument ${i + 1}/${filesToUpload.length} wird hochgeladen…`
-            : `Uploading document ${i + 1}/${filesToUpload.length}…`
+            ? `${filesToUpload.length} Dokument(e) werden hochgeladen…`
+            : `Uploading ${filesToUpload.length} document(s)…`
         );
         try {
-          const docRef = await uploadDocumentWithProgress(file);
-          uploadedDocs.push(docRef);
+          uploadedDocs = await Promise.all(
+            filesToUpload.map((file) => uploadDocumentWithProgress(file))
+          );
           toast.dismiss(toastId);
         } catch (uploadErr: any) {
           toast.dismiss(toastId);
           const errorText = uploadErr?.response?.data?.message || uploadErr?.message || '';
           toast.error(
             language === 'de'
-              ? `Fehler beim Hochladen von "${file.name}" ${errorText ? `(${errorText})` : ''}`
-              : `Failed to upload "${file.name}" ${errorText ? `(${errorText})` : ''}`
+              ? `Fehler beim Hochladen ${errorText ? `(${errorText})` : ''}`
+              : `Failed to upload documents ${errorText ? `(${errorText})` : ''}`
           );
           setIsSubmitting(false);
           return;

@@ -69,4 +69,9 @@ const cashBookEntrySchema = new Schema<ICashBookEntry>({
   month: { type: Number, required: true },
 }, { timestamps: true });
 
+// Performance indexes for rapid sorting and filtering
+cashBookEntrySchema.index({ isDeleted: 1, date: 1, createdAt: 1 });
+cashBookEntrySchema.index({ isDeleted: 1, year: 1, month: 1 });
+cashBookEntrySchema.index({ isDeleted: 1, voucherNo: 1 });
+
 export const CashBookEntry = mongoose.model<ICashBookEntry>('CashBookEntry', cashBookEntrySchema);
