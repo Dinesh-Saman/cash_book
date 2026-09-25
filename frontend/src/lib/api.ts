@@ -3,7 +3,7 @@ import type { CashBookEntry, BookingRule, Settings, Summary, AuditLog, User } fr
 import { resolveBilingualMessage } from './utils';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api` : '/api');
-const api = axios.create({ baseURL: apiBaseUrl });
+export const api = axios.create({ baseURL: apiBaseUrl });
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
@@ -86,6 +86,29 @@ export const entriesApi = {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(href), 1000);
   },
+};
+
+// ─── Documents ───────────────────────────────────────────────────────────────
+export const documentsApi = {
+  upload: (formData: FormData, onProgress?: (pct: number) => void) =>
+    api.post<{ success: boolean; data: { path: string; originalName: string; mimeType: string } }>(
+      '/documents/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+        },
+      }
+    ),
+  uploadChunk: (formData: FormData) =>
+    api.post<{ success: boolean; data?: { path: string; originalName: string; mimeType: string }; message?: string }>(
+      '/documents/upload-chunk',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    ),
 };
 
 // ─── Booking Rules ────────────────────────────────────────────────────────────

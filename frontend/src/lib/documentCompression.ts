@@ -10,7 +10,7 @@
  * Handled automatically on download via `/api/entries/:id/merged-pdf` and `/uploads/:filename?download=true`.
  */
 
-const PRE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES = 3.5 * 1024 * 1024; // 3.5 MB upload threshold
+const PRE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES = 800 * 1024; // 800 KB upload threshold
 
 export interface CompressionResult {
   file: File;
@@ -21,8 +21,8 @@ export interface CompressionResult {
 
 /**
  * Compresses an image file using canvas.
- * Uses high-resolution scaling (up to 2560px) and 0.85 quality JPEG
- * to retain crisp financial text, receipts, and line items.
+ * Uses high-resolution scaling (up to 2048px) and 0.82 quality JPEG
+ * to retain crisp financial text, receipts, and line items while keeping file size small.
  */
 async function compressImageFile(file: File): Promise<File> {
   return new Promise((resolve) => {
@@ -31,7 +31,7 @@ async function compressImageFile(file: File): Promise<File> {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        const maxDimension = 2560; // High-resolution receipt quality
+        const maxDimension = 2048; // High-resolution receipt quality
 
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
@@ -56,7 +56,7 @@ async function compressImageFile(file: File): Promise<File> {
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // 0.85 quality JPEG — crisp text and readable numbers
+        // 0.82 quality JPEG — crisp text and readable numbers, very lightweight
         canvas.toBlob(
           (blob) => {
             if (!blob || blob.size >= file.size) {
@@ -70,7 +70,7 @@ async function compressImageFile(file: File): Promise<File> {
             resolve(compressedFile);
           },
           'image/jpeg',
-          0.85
+          0.82
         );
       };
 

@@ -8,6 +8,7 @@ import { formatDateForInput, formatAmountWithCommas, parseFormattedAmount } from
 import { useTranslation } from '../../store/languageStore';
 import { translateBookingRuleName } from '../../lib/i18n/translations';
 import { optimizeDocumentIfNeeded } from '../../lib/documentCompression';
+import { uploadDocumentWithProgress, type UploadedDocumentRef } from '../../lib/documentUpload';
 import { cn } from '../../lib/utils';
 
 interface Props {
@@ -242,29 +243,34 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
         );
         continue;
       }
-      if (rawFile.size > 10 * 1024 * 1024) {
-        const toastId = toast.loading(
-          language === 'de' ? `"${rawFile.name}" wird optimiert…` : `Optimizing "${rawFile.name}"…`
-        );
-        try {
-          const { file: optimized, wasCompressed, originalSizeBytes, compressedSizeBytes } =
-            await optimizeDocumentIfNeeded(rawFile);
-          if (wasCompressed) {
-            const origMB = (originalSizeBytes / 1024 / 1024).toFixed(1);
-            const compMB = (compressedSizeBytes / 1024 / 1024).toFixed(1);
-            toast.success(
-              language === 'de'
-                ? `Optimiert: ${origMB} MB → ${compMB} MB`
-                : `Optimized: ${origMB} MB → ${compMB} MB`,
-              { id: toastId }
-            );
-            toAdd.push(optimized);
-          } else {
+      if (rawFile.size > 800 * 1024) {
+        const isImg = rawFile.type.startsWith('image/') || /\.(jpe?g|png)$/i.test(rawFile.name);
+        if (isImg) {
+          const toastId = toast.loading(
+            language === 'de' ? `"${rawFile.name}" wird optimiert…` : `Optimizing "${rawFile.name}"…`
+          );
+          try {
+            const { file: optimized, wasCompressed, originalSizeBytes, compressedSizeBytes } =
+              await optimizeDocumentIfNeeded(rawFile);
+            if (wasCompressed) {
+              const origMB = (originalSizeBytes / 1024 / 1024).toFixed(1);
+              const compMB = (compressedSizeBytes / 1024 / 1024).toFixed(1);
+              toast.success(
+                language === 'de'
+                  ? `Optimiert: ${origMB} MB → ${compMB} MB`
+                  : `Optimized: ${origMB} MB → ${compMB} MB`,
+                { id: toastId }
+              );
+              toAdd.push(optimized);
+            } else {
+              toast.dismiss(toastId);
+              toAdd.push(optimized);
+            }
+          } catch {
             toast.dismiss(toastId);
-            toAdd.push(optimized);
+            toAdd.push(rawFile);
           }
-        } catch {
-          toast.dismiss(toastId);
+        } else {
           toAdd.push(rawFile);
         }
       } else {
@@ -292,6 +298,35 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
 
     setIsSubmitting(true);
     try {
+      // Upload any new files safely (individual / chunked) so no single request exceeds Vercel's 4.5 MB limit
+      const allowedNewCount = Math.max(0, 10 - activeExistingCount);
+      const filesToUpload = newFiles.slice(0, allowedNewCount);
+      const uploadedDocs: UploadedDocumentRef[] = [];
+
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const toastId = toast.loading(
+          language === 'de'
+            ? `Dokument ${i + 1}/${filesToUpload.length} wird hochgeladen…`
+            : `Uploading document ${i + 1}/${filesToUpload.length}…`
+        );
+        try {
+          const docRef = await uploadDocumentWithProgress(file);
+          uploadedDocs.push(docRef);
+          toast.dismiss(toastId);
+        } catch (uploadErr: any) {
+          toast.dismiss(toastId);
+          const errorText = uploadErr?.response?.data?.message || uploadErr?.message || '';
+          toast.error(
+            language === 'de'
+              ? `Fehler beim Hochladen von "${file.name}" ${errorText ? `(${errorText})` : ''}`
+              : `Failed to upload "${file.name}" ${errorText ? `(${errorText})` : ''}`
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const fd = new FormData();
       fd.append('date', date);
       fd.append('voucherNo', voucherNo.trim());
@@ -303,9 +338,10 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       fd.append('contraAccount', contraAccount.trim());
       fd.append('columnH', contraAccount.trim());
 
-      // Append new files under the field name "documents" (strictly max 10 total)
-      const allowedNewCount = Math.max(0, 10 - activeExistingCount);
-      newFiles.slice(0, allowedNewCount).forEach((f) => fd.append('documents', f));
+      // Pass the uploaded document references as JSON string
+      if (uploadedDocs.length > 0) {
+        fd.append('uploadedDocuments', JSON.stringify(uploadedDocs));
+      }
 
       // In edit mode, tell the backend which existing docs to remove
       if (isEdit && removedPaths.size > 0) {

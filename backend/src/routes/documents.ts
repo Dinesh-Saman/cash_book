@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import path from 'path';
-import { getDocumentStream } from '../services/documentStorage';
+import crypto from 'crypto';
+import multer from 'multer';
+import { getDocumentStream, saveDocumentToGridFS } from '../services/documentStorage';
+import { UploadChunk } from '../models/UploadChunk';
+import { authenticate } from '../middleware/auth';
 import {
   compressImageToTargetKB,
   compressPdfToTargetKB,
@@ -10,6 +14,11 @@ import {
   DYNAMIC_TARGET_5_TO_10_KB,
   DYNAMIC_HARD_LIMIT_5_TO_10_BYTES,
 } from '../services/documentCompression';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per chunk or single file
+});
 
 const router = Router();
 
@@ -126,6 +135,85 @@ export async function serveDocument(req: any, res: any) {
   }
 }
 
+// ─── POST /upload ─────────────────────────────────────────────────────────────
+// Uploads a single document (<= 3.5 MB, well within 4.5 MB serverless limit)
+router.post('/upload', authenticate, upload.single('file'), async (req: any, res, next) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    const ext = path.extname(file.originalname) || '';
+    const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
+    await saveDocumentToGridFS(generatedFilename, file.buffer, file.mimetype, file.originalname);
+    res.json({
+      success: true,
+      data: {
+        path: generatedFilename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── POST /upload-chunk ───────────────────────────────────────────────────────
+// Uploads a chunk of a document (> 3.5 MB, e.g. multi-MB PDFs or high-res scans)
+router.post('/upload-chunk', authenticate, upload.single('chunk'), async (req: any, res, next) => {
+  try {
+    const file = req.file;
+    const { uploadId, chunkIndex, totalChunks, filename, mimeType } = req.body;
+    if (!file || !uploadId || chunkIndex === undefined || !totalChunks) {
+      return res.status(400).json({ success: false, message: 'Missing chunk parameters' });
+    }
+
+    const cIdx = Number(chunkIndex);
+    const tChunks = Number(totalChunks);
+
+    await UploadChunk.create({
+      uploadId,
+      chunkIndex: cIdx,
+      totalChunks: tChunks,
+      data: file.buffer,
+      filename: filename || file.originalname,
+      mimeType: mimeType || file.mimetype || 'application/octet-stream',
+    });
+
+    const savedCount = await UploadChunk.countDocuments({ uploadId });
+    if (savedCount === tChunks) {
+      // All chunks received: assemble in exact chunkIndex order
+      const allChunks = await UploadChunk.find({ uploadId }).sort({ chunkIndex: 1 });
+      const fullBuffer = Buffer.concat(allChunks.map((c) => c.data));
+      const origName = filename || file.originalname || 'document.pdf';
+      const ext = path.extname(origName) || '';
+      const generatedFilename = `${crypto.randomBytes(16).toString('hex')}${ext.toLowerCase()}`;
+      const resolvedMime = mimeType || file.mimetype || 'application/pdf';
+
+      await saveDocumentToGridFS(generatedFilename, fullBuffer, resolvedMime, origName);
+      await UploadChunk.deleteMany({ uploadId });
+
+      return res.json({
+        success: true,
+        data: {
+          path: generatedFilename,
+          originalName: origName,
+          mimeType: resolvedMime,
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Chunk ${cIdx + 1}/${tChunks} stored`,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:filename', serveDocument);
+router.get('/*', serveDocument);
 
 export default router;

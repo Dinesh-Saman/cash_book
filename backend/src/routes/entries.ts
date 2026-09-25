@@ -293,10 +293,23 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
       } catch {}
     }
 
-    // Save uploaded files to GridFS (strictly capped at 10 files)
+    // Support pre-uploaded documents (from individual/chunked upload)
+    let preUploadedDocs: { path: string; originalName: string; mimeType: string }[] = [];
+    if (req.body.uploadedDocuments) {
+      try {
+        preUploadedDocs = typeof req.body.uploadedDocuments === 'string'
+          ? JSON.parse(req.body.uploadedDocuments)
+          : req.body.uploadedDocuments;
+      } catch {
+        preUploadedDocs = [];
+      }
+    }
+
+    // Save uploaded files to GridFS (strictly capped at 10 files total)
     const rawFiles = (req.files as Express.Multer.File[]) || [];
-    const files = rawFiles.slice(0, 10);
+    const files = rawFiles.slice(0, Math.max(0, 10 - preUploadedDocs.length));
     const savedDocs = await Promise.all(files.map(saveFile));
+    const allSavedDocs = [...preUploadedDocs, ...savedDocs].slice(0, 10);
 
     const entry = await CashBookEntry.create({
       date: entryDate,
@@ -311,10 +324,10 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
       columnH: resolvedAccount,
       year: entryYear,
       month: entryDate.getMonth() + 1,
-      documents: savedDocs,
+      documents: allSavedDocs,
       // Keep legacy fields populated from first document for backward compat
-      documentPath: savedDocs[0]?.path,
-      documentOriginalName: savedDocs[0]?.originalName,
+      documentPath: allSavedDocs[0]?.path,
+      documentOriginalName: allSavedDocs[0]?.originalName,
       createdBy: req.user._id
     });
 
@@ -388,12 +401,25 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
     // Start from existing documents, filter out removed ones
     let currentDocs = getAllDocuments(entry).filter((d) => !pathsToRemove.includes(d.path));
 
+    // Support pre-uploaded documents (from individual/chunked upload)
+    let preUploadedDocs: { path: string; originalName: string; mimeType: string }[] = [];
+    if (req.body.uploadedDocuments) {
+      try {
+        preUploadedDocs = typeof req.body.uploadedDocuments === 'string'
+          ? JSON.parse(req.body.uploadedDocuments)
+          : req.body.uploadedDocuments;
+      } catch {
+        preUploadedDocs = [];
+      }
+    }
+
     // Append newly uploaded files (strictly capped so total does not exceed 10)
     const rawNewFiles = (req.files as Express.Multer.File[]) || [];
     const maxNewAllowed = Math.max(0, 10 - currentDocs.length);
-    const newFiles = rawNewFiles.slice(0, maxNewAllowed);
+    const remainingSlots = Math.max(0, maxNewAllowed - preUploadedDocs.length);
+    const newFiles = rawNewFiles.slice(0, remainingSlots);
     const newSavedDocs = await Promise.all(newFiles.map(saveFile));
-    const allDocs = [...currentDocs, ...newSavedDocs];
+    const allDocs = [...currentDocs, ...preUploadedDocs, ...newSavedDocs].slice(0, 10);
 
     let resolvedAccount = entry.contraAccount || entry.columnH || '';
     if (contraAccount !== undefined || columnH !== undefined) {
