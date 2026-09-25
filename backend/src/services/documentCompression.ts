@@ -6,20 +6,28 @@ export interface DocumentItem {
   mimeType: string;
 }
 
-// ─── Standard limits for 1 to 5 documents: strictly < 200 KB ───────────────────
+// ─── Standard limits for <= 5 uploaded pages: strictly < 200 KB ───────────────────
 export const MAX_TARGET_KB = 185;
 export const HARD_LIMIT_BYTES = 198 * 1024; // strictly below 200 KB (204,800 bytes)
 
-// ─── Dynamic expanded limits for > 5 documents (between 6 and 10): strictly < 500 KB ──
+// ─── Dynamic expanded limits for > 5 uploaded pages: strictly < 500 KB ─────────────
 export const DYNAMIC_TARGET_5_TO_10_KB = 470;
 export const DYNAMIC_HARD_LIMIT_5_TO_10_BYTES = 495 * 1024; // strictly below 500 KB (512,000 bytes)
 
 let mupdfModule: any = null;
 async function getMuPDF(): Promise<any> {
   if (!mupdfModule) {
-    // Dynamic import to support ESM MuPDF with top-level await in CommonJS Node runtime
     const dynamicImport = new Function('specifier', 'return import(specifier)');
-    mupdfModule = await dynamicImport('mupdf');
+    try {
+      mupdfModule = await dynamicImport('mupdf');
+    } catch {
+      try {
+        mupdfModule = await dynamicImport('mupdf/dist/mupdf.js');
+      } catch (err) {
+        console.warn('Could not load mupdf:', err);
+        return null;
+      }
+    }
   }
   return mupdfModule;
 }
@@ -39,55 +47,97 @@ async function getSharp(): Promise<any> {
   return sharpModule;
 }
 
-interface PageStrategy {
-  dpi: number;
-  maxDim: number;
-  quality: number;
-  chroma: '4:4:4' | '4:2:0';
-  grayscale: boolean;
+/**
+ * Counts the pages of a PDF buffer safely.
+ */
+export async function getPdfPageCount(buf: Buffer): Promise<number> {
+  try {
+    const doc = await PDFDocument.load(buf, { ignoreEncryption: true });
+    return Math.max(1, doc.getPageCount());
+  } catch {
+    try {
+      const mupdf = await getMuPDF();
+      if (mupdf) {
+        const doc = mupdf.Document.openDocument(buf, 'application/pdf');
+        return Math.max(1, doc.countPages());
+      }
+    } catch {}
+  }
+  return 1;
 }
 
-function getPageStrategy(pageCount: number, targetKB: number = MAX_TARGET_KB): PageStrategy {
-  // When target budget is dynamically expanded to < 500 KB (for > 5 documents)
-  if (targetKB >= 450) {
-    if (pageCount <= 6) {
-      return { dpi: 135, maxDim: 1500, quality: 78, chroma: '4:4:4', grayscale: false };
-    } else if (pageCount <= 10) {
-      return { dpi: 125, maxDim: 1350, quality: 75, chroma: '4:4:4', grayscale: false };
+/**
+ * Counts total pages across all document items.
+ * Images count as 1 page each. PDFs count by their page count.
+ */
+export async function countTotalPages(items: DocumentItem[]): Promise<number> {
+  let count = 0;
+  for (const item of items) {
+    const isPdf =
+      item.mimeType === 'application/pdf' ||
+      /\.pdf$/i.test(item.originalName) ||
+      (item.buffer && item.buffer.length >= 4 && item.buffer[0] === 0x25 && item.buffer[1] === 0x50 && item.buffer[2] === 0x44 && item.buffer[3] === 0x46);
+    if (isPdf) {
+      count += await getPdfPageCount(item.buffer);
     } else {
-      return { dpi: 100, maxDim: 1050, quality: 68, chroma: '4:2:0', grayscale: false };
+      count += 1;
     }
   }
+  return Math.max(1, count);
+}
 
-  // Standard target ceiling <= 185 KB (strictly < 200 KB for <= 5 documents)
-  if (pageCount <= 1) {
-    return { dpi: 150, maxDim: 1800, quality: 82, chroma: '4:4:4', grayscale: false };
-  } else if (pageCount <= 3) {
-    return { dpi: 135, maxDim: 1500, quality: 76, chroma: '4:4:4', grayscale: false };
-  } else if (pageCount <= 6) {
-    return { dpi: 110, maxDim: 1200, quality: 70, chroma: '4:2:0', grayscale: false };
-  } else if (pageCount <= 10) {
-    return { dpi: 96, maxDim: 900, quality: 60, chroma: '4:2:0', grayscale: true };
-  } else {
-    return { dpi: 78, maxDim: 700, quality: 48, chroma: '4:2:0', grayscale: true };
+/**
+ * Helper to compress an individual image buffer to strictly under maxBytes.
+ */
+async function compressImageBufferToBytes(
+  imgBuf: Buffer,
+  maxBytes: number,
+  sharp: any
+): Promise<Buffer> {
+  let quality = 82;
+  let maxDim = 1600;
+  if (maxBytes < 35 * 1024) {
+    quality = 58;
+    maxDim = 950;
+  } else if (maxBytes < 50 * 1024) {
+    quality = 66;
+    maxDim = 1100;
+  } else if (maxBytes < 75 * 1024) {
+    quality = 74;
+    maxDim = 1350;
   }
+
+  let out = await sharp(imgBuf)
+    .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality, mozjpeg: true, chromaSubsampling: quality >= 70 ? '4:4:4' : '4:2:0' })
+    .toBuffer();
+
+  while (out.length > maxBytes && quality > 32) {
+    quality -= 8;
+    maxDim = Math.max(650, Math.floor(maxDim * 0.88));
+    out = await sharp(imgBuf)
+      .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality, mozjpeg: true, chromaSubsampling: '4:2:0' })
+      .toBuffer();
+  }
+  return out;
 }
 
 /**
  * Compresses an image buffer so that its final size lands strictly below targetKB
  * while preserving maximum sharpness, resolution, and text readability.
- * Uses 4:4:4 chroma subsampling (no color subsampling blur) and progressive mozjpeg quantization.
  */
 export async function compressImageToTargetKB(
   buf: Buffer,
   contentType: string = 'image/jpeg',
   targetKB: number = MAX_TARGET_KB
 ): Promise<{ buffer: Buffer; contentType: string }> {
-  const targetBytes = targetKB * 1024;
+  const hardLimit = targetKB <= 200 ? HARD_LIMIT_BYTES : DYNAMIC_HARD_LIMIT_5_TO_10_BYTES;
+  const targetBytes = Math.min(targetKB * 1024, hardLimit - 2048);
   const isExistingJpg = buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xd8;
 
-  // If already a JPEG within the target limit, return original with ZERO quality loss
-  if (isExistingJpg && buf.length <= targetBytes) {
+  // If already a JPEG within the target limit, return original with zero quality loss
+  if (isExistingJpg && buf.length <= hardLimit) {
     return { buffer: buf, contentType: 'image/jpeg' };
   }
 
@@ -97,12 +147,11 @@ export async function compressImageToTargetKB(
       return { buffer: buf, contentType };
     }
     const meta = await sharp(buf).metadata();
-    // Maintain generous dimensions so small receipt text remains sharp
     let currentDim = Math.min(Math.max(meta.width || 1800, meta.height || 1800), 1800);
-    let quality = 84;
+    let quality = 82;
     let out = buf;
 
-    for (let attempt = 0; attempt < 9; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       let pipeline = sharp(buf).rotate();
       if (meta.width && meta.height && Math.max(meta.width, meta.height) > currentDim) {
         pipeline = pipeline.resize({
@@ -113,7 +162,6 @@ export async function compressImageToTargetKB(
         });
       }
 
-      // 4:4:4 chroma subsampling ensures crisp character edges and no color bleed
       out = await pipeline
         .jpeg({
           quality,
@@ -126,15 +174,14 @@ export async function compressImageToTargetKB(
         break;
       }
 
-      // Progressively step down quality before sacrificing resolution
-      if (quality > 70) {
-        quality -= 6;
-      } else if (quality > 55) {
-        quality -= 6;
-        currentDim = Math.max(1100, Math.floor(currentDim * 0.9));
+      if (quality > 68) {
+        quality -= 8;
+      } else if (quality > 50) {
+        quality -= 8;
+        currentDim = Math.max(1000, Math.floor(currentDim * 0.88));
       } else {
-        quality = Math.max(38, quality - 6);
-        currentDim = Math.max(800, Math.floor(currentDim * 0.85));
+        quality = Math.max(35, quality - 6);
+        currentDim = Math.max(700, Math.floor(currentDim * 0.82));
       }
     }
 
@@ -146,96 +193,85 @@ export async function compressImageToTargetKB(
 }
 
 /**
- * Compresses any PDF buffer so that its final size lands strictly below targetKB.
- * If the PDF is already ≤ targetKB, returns untouched for 100% original quality.
- * Otherwise, rasterizes pages using MuPDF at high resolution and re-encodes with mozjpeg 4:4:4
- * to eliminate heavy embedded font subsets and uncompressed streams while retaining razor-sharp text.
+ * Compresses any PDF buffer so that its final size lands strictly below targetKB / hardLimit.
+ * - <= 5 pages: strictly < 200 KB
+ * - > 5 pages: strictly < 500 KB
  */
 export async function compressPdfToTargetKB(
   pdfBuf: Buffer,
-  targetKB: number = MAX_TARGET_KB
+  targetKB?: number,
+  knownPageCount?: number
 ): Promise<Buffer> {
-  const targetBytes = targetKB * 1024;
-  if (pdfBuf.length <= targetBytes) {
+  const count = knownPageCount || await getPdfPageCount(pdfBuf);
+  const isUnder5 = count <= 5;
+  const resolvedTargetKB = targetKB || (isUnder5 ? MAX_TARGET_KB : DYNAMIC_TARGET_5_TO_10_KB);
+  const hardLimit = isUnder5 ? HARD_LIMIT_BYTES : DYNAMIC_HARD_LIMIT_5_TO_10_BYTES;
+
+  if (pdfBuf.length <= hardLimit) {
     return pdfBuf;
   }
 
-  const isDynamic500 = targetKB >= 450;
-  const hardLimit = isDynamic500 ? DYNAMIC_HARD_LIMIT_5_TO_10_BYTES : HARD_LIMIT_BYTES;
-
   try {
     const sharp = await getSharp();
-    if (!sharp) return pdfBuf;
-
     const mupdf = await getMuPDF();
-    const doc = mupdf.Document.openDocument(pdfBuf, 'application/pdf');
-    const count = doc.countPages();
 
-    if (count === 0) {
+    if (!sharp || !mupdf) {
+      return pdfBuf;
+    }
+
+    const doc = mupdf.Document.openDocument(pdfBuf, 'application/pdf');
+    const pageCount = doc.countPages();
+    if (pageCount === 0) {
       const empty = await PDFDocument.create();
-      empty.addPage([595, 842]);
+      empty.addPage([595.28, 841.89]);
       return Buffer.from(await empty.save());
     }
 
-    const strategy = getPageStrategy(count, targetKB);
+    const totalAvail = resolvedTargetKB * 1024 - (2048 + 512 * pageCount);
+    const perPageBytes = Math.max(8 * 1024, Math.floor(totalAvail / pageCount));
 
-    const renderPdfWithStrategy = async (strat: PageStrategy): Promise<Buffer> => {
-      const newPdf = await PDFDocument.create();
-      const currScale = strat.dpi / 72;
+    let scale = 1.5;
+    if (perPageBytes < 40 * 1024) scale = 1.15;
+    else if (perPageBytes < 60 * 1024) scale = 1.35;
+    else if (perPageBytes < 90 * 1024) scale = 1.5;
+    else scale = 1.75;
 
-      for (let i = 0; i < count; i++) {
-        const page = doc.loadPage(i);
-        const bounds = page.getBounds();
-        const width = bounds[2] - bounds[0];
-        const height = bounds[3] - bounds[1];
+    const newPdf = await PDFDocument.create();
 
-        const pixmap = page.toPixmap(
-          mupdf.Matrix.scale(currScale, currScale),
-          strat.grayscale ? mupdf.ColorSpace.DeviceGray : mupdf.ColorSpace.DeviceRGB,
-          false
-        );
-        const pngBytes = Buffer.from(pixmap.asPNG());
+    for (let i = 0; i < pageCount; i++) {
+      const page = doc.loadPage(i);
+      const bounds = page.getBounds();
+      const w = bounds[2] - bounds[0];
+      const h = bounds[3] - bounds[1];
 
-        let pipeline = sharp(pngBytes).resize({
-          width: strat.maxDim,
-          height: strat.maxDim,
-          fit: 'inside',
-          withoutEnlargement: true,
-        });
+      const pix = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
+      const pngBytes = Buffer.from(pix.asPNG());
 
-        if (strat.grayscale) {
-          pipeline = pipeline.grayscale();
-        }
+      const jpgBytes = await compressImageBufferToBytes(pngBytes, perPageBytes, sharp);
+      const emb = await newPdf.embedJpg(jpgBytes);
+      const newPage = newPdf.addPage([w, h]);
+      newPage.drawImage(emb, { x: 0, y: 0, width: w, height: h });
+    }
 
-        const jpg = await pipeline
-          .jpeg({
-            quality: strat.quality,
-            mozjpeg: true,
-            chromaSubsampling: strat.chroma,
-          })
-          .toBuffer();
-
-        const embedded = await newPdf.embedJpg(jpg);
-        const newPage = newPdf.addPage([width, height]);
-        newPage.drawImage(embedded, { x: 0, y: 0, width, height });
-      }
-
-      const bytes = await newPdf.save({ useObjectStreams: true });
-      return Buffer.from(bytes as any);
-    };
-
-    let result = await renderPdfWithStrategy(strategy);
+    let result = Buffer.from(await newPdf.save({ useObjectStreams: true }));
 
     // Hard limit safeguard
     if (result.length > hardLimit) {
-      const tighterStrategy: PageStrategy = {
-        dpi: Math.max(72, Math.floor(strategy.dpi * 0.82)),
-        maxDim: Math.max(650, Math.floor(strategy.maxDim * 0.8)),
-        quality: Math.max(35, strategy.quality - 15),
-        chroma: '4:2:0',
-        grayscale: isDynamic500 ? false : true,
-      };
-      result = await renderPdfWithStrategy(tighterStrategy);
+      const tighterPdf = await PDFDocument.create();
+      const scaleDown = Math.min(0.85, (hardLimit * 0.95) / result.length);
+      for (let i = 0; i < pageCount; i++) {
+        const page = doc.loadPage(i);
+        const bounds = page.getBounds();
+        const w = bounds[2] - bounds[0];
+        const h = bounds[3] - bounds[1];
+        const pix = page.toPixmap(mupdf.Matrix.scale(1.1, 1.1), mupdf.ColorSpace.DeviceRGB, false);
+        const pngBytes = Buffer.from(pix.asPNG());
+        const tighterJpg = await compressImageBufferToBytes(pngBytes, Math.floor(perPageBytes * scaleDown), sharp);
+        const emb = await tighterPdf.embedJpg(tighterJpg);
+        const newPage = tighterPdf.addPage([w, h]);
+        newPage.drawImage(emb, { x: 0, y: 0, width: w, height: h });
+      }
+      result = Buffer.from(await tighterPdf.save({ useObjectStreams: true }));
     }
 
     return result;
@@ -245,20 +281,11 @@ export async function compressPdfToTargetKB(
   }
 }
 
-interface PageItem {
-  type: 'pdf-page' | 'image';
-  mupdfDoc?: any;
-  pageIndex?: number;
-  width: number;
-  height: number;
-  imageBuffer?: Buffer;
-}
-
 /**
  * Merges all attached documents (both PDF documents with all pages and image files)
  * into a single unified PDF.
- * - For 1 to 5 documents: strictly below 200 KB (target ≤ 185 KB).
- * - For > 5 documents (between 6 and 10): dynamically increased to strictly below 500 KB (target ≤ 470 KB).
+ * - Total pages <= 5: strictly < 200 KB.
+ * - Total pages > 5: strictly < 500 KB.
  */
 export async function buildMergedPdf(
   items: DocumentItem[],
@@ -273,38 +300,33 @@ export async function buildMergedPdf(
   const isBufferPdf = (buf: Buffer) =>
     buf && buf.length >= 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46; // '%PDF'
 
-  // Fast path: if single PDF, return directly with 0 conversion overhead
+  const totalPages = await countTotalPages(items);
+  const isUnder5 = totalPages <= 5;
+  const targetKB = _targetTotalKB || (isUnder5 ? MAX_TARGET_KB : DYNAMIC_TARGET_5_TO_10_KB);
+  const hardLimit = isUnder5 ? HARD_LIMIT_BYTES : DYNAMIC_HARD_LIMIT_5_TO_10_BYTES;
+
+  // Single PDF item
   if (
     items.length === 1 &&
     (items[0].mimeType === 'application/pdf' ||
       /\.pdf$/i.test(items[0].originalName) ||
       isBufferPdf(items[0].buffer))
   ) {
-    return items[0].buffer;
+    if (items[0].buffer.length <= hardLimit) {
+      return items[0].buffer;
+    }
+    return await compressPdfToTargetKB(items[0].buffer, targetKB, totalPages);
   }
 
   try {
     const mergedPdf = await PDFDocument.create();
+    const sharp = await getSharp();
 
     for (const item of items) {
       const isPdf =
         item.mimeType === 'application/pdf' ||
         /\.pdf$/i.test(item.originalName) ||
         isBufferPdf(item.buffer);
-
-      const isPng =
-        !isPdf &&
-        (item.mimeType === 'image/png' ||
-          /\.png$/i.test(item.originalName) ||
-          (item.buffer.length > 2 && item.buffer[0] === 0x89 && item.buffer[1] === 0x50));
-
-      const isJpg =
-        !isPdf &&
-        !isPng &&
-        (item.mimeType === 'image/jpeg' ||
-          item.mimeType === 'image/jpg' ||
-          /\.(jpe?g)$/i.test(item.originalName) ||
-          (item.buffer.length > 2 && item.buffer[0] === 0xff && item.buffer[1] === 0xd8));
 
       if (isPdf) {
         try {
@@ -314,42 +336,54 @@ export async function buildMergedPdf(
         } catch (pdfErr) {
           console.error('Error copying PDF pages:', pdfErr);
         }
-      } else if (isPng || isJpg) {
+      } else {
+        // Image item
         try {
-          const embedded = isPng 
-            ? await mergedPdf.embedPng(item.buffer) 
-            : await mergedPdf.embedJpg(item.buffer);
+          let imgBuf = item.buffer;
+          if (sharp) {
+            try {
+              imgBuf = await sharp(item.buffer).rotate().toBuffer();
+            } catch {}
+          }
 
-          const pageWidth = 595.28;
-          const pageHeight = 841.89;
-          const margin = 20;
-          const availW = pageWidth - margin * 2;
-          const availH = pageHeight - margin * 2;
-          const scale = Math.min(availW / embedded.width, availH / embedded.height, 1);
-          const w = embedded.width * scale;
-          const h = embedded.height * scale;
-          const x = margin + (availW - w) / 2;
-          const y = margin + (availH - h) / 2;
+          const isPng =
+            item.mimeType === 'image/png' ||
+            /\.png$/i.test(item.originalName) ||
+            (imgBuf.length > 2 && imgBuf[0] === 0x89 && imgBuf[1] === 0x50);
 
-          const page = mergedPdf.addPage([pageWidth, pageHeight]);
-          page.drawImage(embedded, { x, y, width: w, height: h });
+          let embedded: any;
+          try {
+            embedded = isPng
+              ? await mergedPdf.embedPng(imgBuf)
+              : await mergedPdf.embedJpg(imgBuf);
+          } catch {
+            try {
+              embedded = await mergedPdf.embedJpg(imgBuf);
+            } catch {
+              if (sharp) {
+                const fallbackJpg = await sharp(imgBuf).jpeg().toBuffer();
+                embedded = await mergedPdf.embedJpg(fallbackJpg);
+              }
+            }
+          }
+
+          if (embedded) {
+            const pageWidth = 595.28;
+            const pageHeight = 841.89;
+            const margin = 20;
+            const availW = pageWidth - margin * 2;
+            const availH = pageHeight - margin * 2;
+            const scale = Math.min(availW / embedded.width, availH / embedded.height, 1);
+            const w = embedded.width * scale;
+            const h = embedded.height * scale;
+            const x = margin + (availW - w) / 2;
+            const y = margin + (availH - h) / 2;
+
+            const page = mergedPdf.addPage([pageWidth, pageHeight]);
+            page.drawImage(embedded, { x, y, width: w, height: h });
+          }
         } catch (imgErr) {
           console.error('Error embedding image into PDF:', imgErr);
-        }
-      } else {
-        // Fallback: try loading as PDF, then as JPEG
-        try {
-          const srcDoc = await PDFDocument.load(item.buffer, { ignoreEncryption: true });
-          const pages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
-          pages.forEach((page: any) => mergedPdf.addPage(page));
-        } catch {
-          try {
-            const embedded = await mergedPdf.embedJpg(item.buffer);
-            const page = mergedPdf.addPage([595.28, 841.89]);
-            page.drawImage(embedded, { x: 20, y: 20, width: 555, height: 801 });
-          } catch (embedErr) {
-            console.warn('Could not embed document into merged PDF:', item.originalName, embedErr);
-          }
         }
       }
     }
@@ -358,8 +392,14 @@ export async function buildMergedPdf(
       mergedPdf.addPage([595.28, 841.89]);
     }
 
-    const saved = await mergedPdf.save({ useObjectStreams: true });
-    return Buffer.from(saved as any);
+    const rawMerged = Buffer.from(await mergedPdf.save({ useObjectStreams: true }));
+
+    if (rawMerged.length <= hardLimit) {
+      return rawMerged;
+    }
+
+    // Run compression to meet target ceiling
+    return await compressPdfToTargetKB(rawMerged, targetKB, totalPages);
   } catch (err) {
     console.error('Error building merged PDF:', err);
     try {

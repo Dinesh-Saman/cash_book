@@ -162,12 +162,33 @@ router.get('/summary', async (req, res, next) => {
 });
 
 // ─── GET /:id/merged-pdf ──────────────────────────────────────────────────────
-// Merges all documents of an entry into a single PDF strictly under 200 KB.
+// Merges all documents of an entry into a single PDF strictly under 200 KB (<= 5 pages) or under 500 KB (> 5 pages).
+
+const mergedPdfCache = new Map<string, { buffer: Buffer; timestamp: number }>();
+const MERGED_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 router.get('/:id/merged-pdf', async (req: any, res, next) => {
   try {
     const entry = await CashBookEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Entry not found' });
+
+    const cacheKey = `${entry._id}_${entry.updatedAt ? new Date(entry.updatedAt).getTime() : ''}`;
+    if (mergedPdfCache.has(cacheKey)) {
+      const cached = mergedPdfCache.get(cacheKey)!;
+      if (Date.now() - cached.timestamp < MERGED_CACHE_TTL_MS) {
+        const filename = `Voucher_${entry.voucherNo || entry._id}_Invoice.pdf`;
+        const safeFilename = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.end(cached.buffer);
+      } else {
+        mergedPdfCache.delete(cacheKey);
+      }
+    }
 
     const docs = getAllDocuments(entry);
     if (docs.length === 0) {
@@ -197,6 +218,13 @@ router.get('/:id/merged-pdf', async (req: any, res, next) => {
     }
 
     const pdfBuffer = await buildMergedPdf(items);
+
+    if (mergedPdfCache.size > 200) {
+      const oldestKey = mergedPdfCache.keys().next().value;
+      if (oldestKey) mergedPdfCache.delete(oldestKey);
+    }
+    mergedPdfCache.set(cacheKey, { buffer: pdfBuffer, timestamp: Date.now() });
+
     const filename = `Voucher_${entry.voucherNo || entry._id}_Invoice.pdf`;
     const safeFilename = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
 

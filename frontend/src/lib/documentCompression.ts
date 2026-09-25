@@ -1,12 +1,16 @@
 /**
  * Document compression utility
- * Compresses images exceeding 100 MB before upload, without compromising readability.
- * PDFs are uploaded as-is (no client-side recompression).
  *
- * Download compression (≤200KB) is handled server-side via ?compressed=true&download=true.
+ * Pre-optimizes large client-side images (> 3.5 MB, e.g. phone camera captures)
+ * to ensure fast uploads and compatibility with serverless payload limits.
+ *
+ * Download compression rules:
+ * - Total uploaded pages <= 5: strictly < 200 KB
+ * - Total uploaded pages > 5: strictly < 500 KB
+ * Handled automatically on download via `/api/entries/:id/merged-pdf` and `/uploads/:filename?download=true`.
  */
 
-const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB upload threshold
+const PRE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES = 3.5 * 1024 * 1024; // 3.5 MB upload threshold
 
 export interface CompressionResult {
   file: File;
@@ -17,8 +21,8 @@ export interface CompressionResult {
 
 /**
  * Compresses an image file using canvas.
- * Uses high-resolution scaling (up to 2560px) and iteratively reduces quality
- * until the file is within the 100 MB upload limit.
+ * Uses high-resolution scaling (up to 2560px) and 0.85 quality JPEG
+ * to retain crisp financial text, receipts, and line items.
  */
 async function compressImageFile(file: File): Promise<File> {
   return new Promise((resolve) => {
@@ -27,7 +31,7 @@ async function compressImageFile(file: File): Promise<File> {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        const maxDimension = 2560; // Sharp, receipt-quality resolution
+        const maxDimension = 2560; // High-resolution receipt quality
 
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
@@ -52,7 +56,7 @@ async function compressImageFile(file: File): Promise<File> {
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Use 0.85 quality JPEG — sufficient for text/financial document legibility
+        // 0.85 quality JPEG — crisp text and readable numbers
         canvas.toBlob(
           (blob) => {
             if (!blob || blob.size >= file.size) {
@@ -80,13 +84,12 @@ async function compressImageFile(file: File): Promise<File> {
 }
 
 /**
- * Inspects a document file and reduces its size if it exceeds the 100 MB upload limit.
- * Only images are compressed client-side; PDFs are uploaded as-is.
+ * Inspects a document file and optimizes it if it exceeds the pre-upload threshold.
  */
 export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionResult> {
   const originalSizeBytes = file.size;
 
-  if (file.size <= MAX_UPLOAD_SIZE_BYTES) {
+  if (file.size <= PRE_UPLOAD_OPTIMIZE_THRESHOLD_BYTES) {
     return {
       file,
       wasCompressed: false,
@@ -95,7 +98,6 @@ export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionR
     };
   }
 
-  // File is larger than 100MB
   const isImage = file.type.startsWith('image/') || /\.(jpe?g|png)$/i.test(file.name);
 
   if (isImage) {
@@ -117,7 +119,7 @@ export async function optimizeDocumentIfNeeded(file: File): Promise<CompressionR
     }
   }
 
-  // PDFs > 100MB: still upload (backend limit allows it); no client-side compression possible
+  // PDFs are uploaded as-is; server compresses on download to meet <200KB / <500KB rule
   return {
     file,
     wasCompressed: false,
