@@ -5,24 +5,39 @@ dotenv.config();
 const DEFAULT_MONGODB_URI = 'mongodb+srv://saman2020al_db_user:51LZND7cHAFL58kr@cluster0.q4pwqlo.mongodb.net/cashbook?retryWrites=true&w=majority';
 const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
 
-let isConnected = false;
+let connectionPromise: Promise<void> | null = null;
 
 export async function connectDB() {
-  if (isConnected || mongoose.connection.readyState >= 1) {
+  if (mongoose.connection.readyState >= 2) {
     return;
   }
+
   if (!MONGODB_URI) {
     console.warn('MONGODB_URI is not defined');
     return;
   }
-  try {
-    await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000
-    });
-    isConnected = true;
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
+
+  // Reuse a single connection promise to prevent multiple simultaneous connect attempts
+  if (!connectionPromise) {
+    connectionPromise = mongoose
+      .connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 20000,
+        bufferCommands: false,
+        maxPoolSize: 5,
+        minPoolSize: 0,
+      })
+      .then(() => {
+        console.log('Connected to MongoDB');
+        connectionPromise = null;
+      })
+      .catch((error) => {
+        console.error('MongoDB connection error:', error);
+        connectionPromise = null;
+        throw error;
+      });
   }
+
+  await connectionPromise;
 }
