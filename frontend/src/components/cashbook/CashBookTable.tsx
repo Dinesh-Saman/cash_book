@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { FileText, Edit2, Trash2, Eye, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CashBookEntry } from '../../types';
@@ -60,6 +60,51 @@ export default function CashBookTable({
 }: Props) {
   const { t, formatCurrency, formatDate, language } = useTranslation();
   const [downloadingEntryId, setDownloadingEntryId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<'date' | 'voucherNo'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'date' | 'voucherNo') => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const dir = sortDirection === 'desc' ? -1 : 1;
+      if (sortField === 'voucherNo') {
+        const vA = (a.voucherNo || '').trim();
+        const vB = (b.voucherNo || '').trim();
+        if (vA && !vB) return -1 * dir;
+        if (!vA && vB) return 1 * dir;
+        if (vA && vB) {
+          const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+          if (cmp !== 0) return cmp * dir;
+        }
+        const timeA = new Date(a.date || 0).getTime();
+        const timeB = new Date(b.date || 0).getTime();
+        if (timeA !== timeB) return (timeA - timeB) * dir;
+        return (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) * dir;
+      }
+
+      // Default: Date first, then Voucher Number
+      const timeA = new Date(a.date || 0).getTime();
+      const timeB = new Date(b.date || 0).getTime();
+      if (timeA !== timeB) return (timeA - timeB) * dir;
+      const vA = (a.voucherNo || '').trim();
+      const vB = (b.voucherNo || '').trim();
+      if (vA && !vB) return -1 * dir;
+      if (!vA && vB) return 1 * dir;
+      if (vA && vB) {
+        const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) return cmp * dir;
+      }
+      return (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) * dir;
+    });
+  }, [entries, sortField, sortDirection]);
 
   const handleDownloadPDF = async (e: React.MouseEvent, entryId: string, voucherNo?: string) => {
     e.stopPropagation();
@@ -100,7 +145,7 @@ export default function CashBookTable({
       {/* DESKTOP VIEW (>= md screens) - Standard Column Order */}
       <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-card">
         <table className="w-full text-sm text-slate-700 text-left border-collapse">
-          <DesktopTableHeader t={t} />
+          <DesktopTableHeader t={t} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
           <tbody className="divide-y divide-slate-100">
             {/* Opening Balance Row */}
             {settings?.openingBalance !== undefined && settings.openingBalance > 0 && (
@@ -138,10 +183,10 @@ export default function CashBookTable({
               </tr>
             )}
 
-            {entries.length === 0 ? (
+            {sortedEntries.length === 0 ? (
               <EmptyState t={t} colSpan={11} />
             ) : (
-              entries.map((entry, idx) => (
+              sortedEntries.map((entry, idx) => (
                 <tr
                   key={entry._id}
                   className={cn(
@@ -343,7 +388,7 @@ export default function CashBookTable({
       {/* MOBILE VIEW (< md screens) - Order: Date -> Income -> Expense -> Rule -> Text -> VAT -> Balance -> Voucher No -> Document -> Actions */}
       <div className="block md:hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-card">
         <table className="w-full text-sm text-slate-700 text-left border-collapse">
-          <MobileTableHeader t={t} />
+          <MobileTableHeader t={t} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
           <tbody className="divide-y divide-slate-100">
             {/* Opening Balance Row */}
             {settings?.openingBalance !== undefined && settings.openingBalance > 0 && (
@@ -379,10 +424,10 @@ export default function CashBookTable({
               </tr>
             )}
 
-            {entries.length === 0 ? (
+            {sortedEntries.length === 0 ? (
               <EmptyState t={t} colSpan={11} />
             ) : (
-              entries.map((entry, idx) => (
+              sortedEntries.map((entry, idx) => (
                 <tr
                   key={entry._id}
                   className={cn(
@@ -599,10 +644,17 @@ function EmptyState({ t, colSpan }: { t: (key: any) => string; colSpan: number }
   );
 }
 
-function DesktopTableHeader({ t }: { t: (key: any) => string }) {
+interface HeaderProps {
+  t: (key: any) => string;
+  sortField?: 'date' | 'voucherNo';
+  sortDirection?: 'asc' | 'desc';
+  onSort?: (field: 'date' | 'voucherNo') => void;
+}
+
+function DesktopTableHeader({ t, sortField, sortDirection, onSort }: HeaderProps) {
   const headers = [
-    { key: 'thVoucherNo', align: 'text-left' },
-    { key: 'thDate', align: 'text-left' },
+    { key: 'thVoucherNo', align: 'text-left', sortKey: 'voucherNo' as const },
+    { key: 'thDate', align: 'text-left', sortKey: 'date' as const },
     { key: 'thBookingRule', align: 'text-left' },
     { key: 'thBookingText', align: 'text-left' },
     { key: 'thIncome', align: 'text-right' },
@@ -617,27 +669,39 @@ function DesktopTableHeader({ t }: { t: (key: any) => string }) {
   return (
     <thead>
       <tr className="bg-slate-50/80 border-b border-slate-200">
-        {headers.map((h) => (
-          <th
-            key={h.key}
-            className={cn(
-              'px-4 py-3.5 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap',
-              h.align
-            )}
-          >
-            {t(h.key)}
-          </th>
-        ))}
+        {headers.map((h) => {
+          const isSorted = h.sortKey && sortField === h.sortKey;
+          return (
+            <th
+              key={h.key}
+              onClick={() => h.sortKey && onSort?.(h.sortKey)}
+              className={cn(
+                'px-4 py-3.5 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap',
+                h.sortKey && 'cursor-pointer select-none hover:bg-slate-100/90 transition-colors',
+                h.align
+              )}
+            >
+              <div className={cn('inline-flex items-center gap-1.5', h.align === 'text-right' ? 'justify-end' : '')}>
+                <span>{t(h.key)}</span>
+                {h.sortKey && (
+                  <span className={cn('text-[11px]', isSorted ? 'text-brand-600 font-extrabold' : 'text-slate-400')}>
+                    {isSorted ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                  </span>
+                )}
+              </div>
+            </th>
+          );
+        })}
       </tr>
     </thead>
   );
 }
 
-function MobileTableHeader({ t }: { t: (key: any) => string }) {
+function MobileTableHeader({ t, sortField, sortDirection, onSort }: HeaderProps) {
   // Mobile Order: Voucher No -> Date -> Income -> Expense -> Booking Rule -> Booking Text -> VAT -> Column H -> Balance -> Document -> Actions
   const headers = [
-    { key: 'thVoucherNo', align: 'text-left' },
-    { key: 'thDate', align: 'text-left' },
+    { key: 'thVoucherNo', align: 'text-left', sortKey: 'voucherNo' as const },
+    { key: 'thDate', align: 'text-left', sortKey: 'date' as const },
     { key: 'thIncome', align: 'text-right' },
     { key: 'thExpense', align: 'text-right' },
     { key: 'thBookingRule', align: 'text-left' },
@@ -652,17 +716,29 @@ function MobileTableHeader({ t }: { t: (key: any) => string }) {
   return (
     <thead>
       <tr className="bg-slate-50/80 border-b border-slate-200">
-        {headers.map((h) => (
-          <th
-            key={h.key}
-            className={cn(
-              'px-3.5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap',
-              h.align
-            )}
-          >
-            {t(h.key)}
-          </th>
-        ))}
+        {headers.map((h) => {
+          const isSorted = h.sortKey && sortField === h.sortKey;
+          return (
+            <th
+              key={h.key}
+              onClick={() => h.sortKey && onSort?.(h.sortKey)}
+              className={cn(
+                'px-3.5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap',
+                h.sortKey && 'cursor-pointer select-none hover:bg-slate-100/90 transition-colors',
+                h.align
+              )}
+            >
+              <div className={cn('inline-flex items-center gap-1.5', h.align === 'text-right' ? 'justify-end' : '')}>
+                <span>{t(h.key)}</span>
+                {h.sortKey && (
+                  <span className={cn('text-[11px]', isSorted ? 'text-brand-600 font-extrabold' : 'text-slate-400')}>
+                    {isSorted ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                  </span>
+                )}
+              </div>
+            </th>
+          );
+        })}
       </tr>
     </thead>
   );

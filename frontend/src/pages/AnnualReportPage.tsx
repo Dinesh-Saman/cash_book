@@ -70,9 +70,20 @@ export default function AnnualReportPage() {
             const totalExpense = (entries as CashBookEntry[])
               .filter((e: CashBookEntry) => e.type === 'expense')
               .reduce((s: number, e: CashBookEntry) => s + e.amount, 0);
-            const sortedEntries = [...(entries as CashBookEntry[])].sort((a, b) =>
-              (a.voucherNo || '').localeCompare(b.voucherNo || '', undefined, { numeric: true, sensitivity: 'base' })
-            );
+            const sortedEntries = [...(entries as CashBookEntry[])].sort((a, b) => {
+              const timeA = new Date(a.date || 0).getTime();
+              const timeB = new Date(b.date || 0).getTime();
+              if (timeA !== timeB) return timeA - timeB;
+              const vA = (a.voucherNo || '').trim();
+              const vB = (b.voucherNo || '').trim();
+              if (vA && !vB) return -1;
+              if (!vA && vB) return 1;
+              if (vA && vB) {
+                const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
+              }
+              return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            });
             const endBalance =
               sortedEntries.length > 0 ? sortedEntries[sortedEntries.length - 1].cashBalance : 0;
             return { month: m, entries: sortedEntries, totalIncome, totalExpense, endBalance };

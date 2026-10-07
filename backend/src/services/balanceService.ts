@@ -7,10 +7,10 @@ export async function recalculateBalances(): Promise<void> {
   const settings = (await Settings.findOne().select('openingBalance').lean()) || { openingBalance: 0 };
   let runningBalance = settings.openingBalance || 0;
 
-  // Fetch all active entries sorted by voucher number ascending
+  // Fetch all active entries sorted by date ascending, then voucher number ascending
   const entriesToUpdate = await CashBookEntry.find({ isDeleted: false })
     .collation(VOUCHER_COLLATION)
-    .sort({ voucherNo: 1, date: 1, createdAt: 1 })
+    .sort({ date: 1, voucherNo: 1, createdAt: 1 })
     .select('_id type amount cashBalance')
     .lean();
 
@@ -46,7 +46,7 @@ export async function getCurrentBalance(): Promise<number> {
   const settings = (await Settings.findOne().select('openingBalance').lean()) || { openingBalance: 0 };
   const latestEntry = await CashBookEntry.findOne({ isDeleted: false })
     .collation(VOUCHER_COLLATION)
-    .sort({ voucherNo: -1, date: -1, createdAt: -1 })
+    .sort({ date: -1, voucherNo: -1, createdAt: -1 })
     .select('cashBalance')
     .lean();
 
@@ -69,7 +69,7 @@ export async function validateExpense(
   // Use projection, lean, and voucher collation
   const allEntries = await CashBookEntry.find(query, { type: 1, amount: 1, date: 1, voucherNo: 1 })
     .collation(VOUCHER_COLLATION)
-    .sort({ voucherNo: 1, date: 1, createdAt: 1 })
+    .sort({ date: 1, voucherNo: 1, createdAt: 1 })
     .lean();
 
   for (let i = 0; i < allEntries.length; i++) {

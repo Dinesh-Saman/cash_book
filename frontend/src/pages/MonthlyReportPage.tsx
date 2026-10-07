@@ -84,9 +84,20 @@ export default function MonthlyReportPage() {
       .then((res) => {
         const d = res.data.data;
         const raw = d?.entries || [];
-        const sorted = [...raw].sort((a, b) =>
-          (a.voucherNo || '').localeCompare(b.voucherNo || '', undefined, { numeric: true, sensitivity: 'base' })
-        );
+        const sorted = [...raw].sort((a, b) => {
+          const timeA = new Date(a.date || 0).getTime();
+          const timeB = new Date(b.date || 0).getTime();
+          if (timeA !== timeB) return timeA - timeB;
+          const vA = (a.voucherNo || '').trim();
+          const vB = (b.voucherNo || '').trim();
+          if (vA && !vB) return -1;
+          if (!vA && vB) return 1;
+          if (vA && vB) {
+            const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+          }
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
         setEntries(sorted);
         setStartBalance(d?.startBalance ?? 0);
         setIsFinalized(d?.isFinalized ?? false);

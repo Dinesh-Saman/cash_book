@@ -33,7 +33,7 @@ router.get('/monthly', async (req, res, next) => {
       isDeleted: false
     })
       .collation({ locale: 'en', numericOrdering: true })
-      .sort({ voucherNo: -1, date: -1, createdAt: -1 });
+      .sort({ date: -1, voucherNo: -1, createdAt: -1 });
 
     const startBalance = priorEntry ? priorEntry.cashBalance : settings.openingBalance;
 
@@ -46,7 +46,7 @@ router.get('/monthly', async (req, res, next) => {
       .find(query)
       .populate('bookingRule')
       .collation({ locale: 'en', numericOrdering: true })
-      .sort({ voucherNo: 1, date: 1, createdAt: 1 });
+      .sort({ date: 1, voucherNo: 1, createdAt: 1 });
 
     const totalIncome = entries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
     const totalExpense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
@@ -77,7 +77,7 @@ router.get('/annual', async (req, res, next) => {
       .find({ year: numYear, isDeleted: false })
       .populate('bookingRule')
       .collation({ locale: 'en', numericOrdering: true })
-      .sort({ voucherNo: 1, date: 1, createdAt: 1 });
+      .sort({ date: 1, voucherNo: 1, createdAt: 1 });
 
     // Group by month
     const byMonth: Record<number, typeof entries> = {};
