@@ -30,9 +30,6 @@ export const useCashbookStore = create<CashbookState>((set, get) => ({
       const res = await entriesApi.getEntries(params);
       const rawEntries = res.data.data.entries || [];
       const sortedEntries = [...rawEntries].sort((a, b) => {
-        const timeA = new Date(a.date || 0).getTime();
-        const timeB = new Date(b.date || 0).getTime();
-        if (timeA !== timeB) return timeA - timeB;
         const vA = (a.voucherNo || '').trim();
         const vB = (b.voucherNo || '').trim();
         if (vA && !vB) return -1;
@@ -41,6 +38,9 @@ export const useCashbookStore = create<CashbookState>((set, get) => ({
           const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
           if (cmp !== 0) return cmp;
         }
+        const timeA = new Date(a.date || 0).getTime();
+        const timeB = new Date(b.date || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
         return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
       });
       set({ entries: sortedEntries });
