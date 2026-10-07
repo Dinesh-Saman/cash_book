@@ -38,6 +38,7 @@ export default function MonthlyReportPage() {
   const [entries, setEntries] = useState<CashBookEntry[]>([]);
   const [startBalance, setStartBalance] = useState(0);
   const [isFinalized, setIsFinalized] = useState(false);
+  const [isMonthLocked, setIsMonthLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const { t, formatCurrency, getMonthName, formatDate, language } = useTranslation();
@@ -82,13 +83,20 @@ export default function MonthlyReportPage() {
       .monthly(year, month, startDate, endDate)
       .then((res) => {
         const d = res.data.data;
-        setEntries(d?.entries || []);
+        const raw = d?.entries || [];
+        const sorted = [...raw].sort((a, b) =>
+          (a.voucherNo || '').localeCompare(b.voucherNo || '', undefined, { numeric: true, sensitivity: 'base' })
+        );
+        setEntries(sorted);
         setStartBalance(d?.startBalance ?? 0);
         setIsFinalized(d?.isFinalized ?? false);
+        setIsMonthLocked(d?.isMonthLocked ?? false);
       })
       .catch(() => {
         setEntries([]);
         setStartBalance(0);
+        setIsFinalized(false);
+        setIsMonthLocked(false);
       })
       .finally(() => setIsLoading(false));
   }, [year, month, startDate, endDate]);
@@ -239,15 +247,22 @@ export default function MonthlyReportPage() {
         </div>
       </div>
 
-      {/* Finalized Banner */}
-      {isFinalized && (
+      {/* Finalized / Locked Banner */}
+      {isFinalized ? (
         <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900">
           <Lock size={18} className="text-rose-600 flex-shrink-0" />
           <p className="font-bold text-xs sm:text-sm">
             {t('yearFinalizedBadge', { year })}
           </p>
         </div>
-      )}
+      ) : isMonthLocked ? (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900">
+          <Lock size={18} className="text-amber-600 flex-shrink-0" />
+          <p className="font-bold text-xs sm:text-sm">
+            {t('monthClosedBadge', { month: getMonthName(month), year })}
+          </p>
+        </div>
+      ) : null}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

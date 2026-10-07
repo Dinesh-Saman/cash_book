@@ -40,11 +40,21 @@ export async function getNextVoucherNumber(): Promise<string> {
   return String(max + 1);
 }
 
-export function isMonthClosed(year: number, month: number): boolean {
+export function isMonthClosed(year: number, month: number, settings?: any): boolean {
+  if (settings?.finalizedYears?.includes(year)) return true;
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+  if (Array.isArray(settings?.lockedMonths) && settings.lockedMonths.includes(monthKey)) return true;
+  if (Array.isArray(settings?.unlockedMonths) && settings.unlockedMonths.includes(monthKey)) return false;
+
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   return year < currentYear || (year === currentYear && month < currentMonth);
+}
+
+export function isMonthUnlockedForAdmin(settings: any, role: string | undefined, year: number, month: number): boolean {
+  if (role !== 'admin') return false;
+  return !isMonthClosed(year, month, settings);
 }
 
 /**
@@ -117,7 +127,8 @@ router.get('/', async (req, res, next) => {
     const skip = (Number(page) - 1) * Number(limit);
     const entries = await CashBookEntry.find(query)
       .populate('bookingRule')
-      .sort({ date: 1, createdAt: 1 })
+      .collation({ locale: 'en', numericOrdering: true })
+      .sort({ voucherNo: 1, date: 1, createdAt: 1 })
       .skip(skip)
       .limit(Number(limit));
 
@@ -266,13 +277,16 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
     const entryYear = entryDate.getFullYear();
     const entryMonth = entryDate.getMonth() + 1;
 
-    if (isMonthClosed(entryYear, entryMonth)) {
-      return res.status(403).json({ success: false, message: 'Vergangene Monate sind abgeschlossen und schreibgeschützt. / Past months are closed and locked for new entries.' });
-    }
-
     const settings = await Settings.findOne() || await Settings.create({});
     if (settings.finalizedYears?.includes(entryYear)) {
       return res.status(400).json({ success: false, message: `Geschäftsjahr ${entryYear} ist abgeschlossen und schreibgeschützt. / Fiscal year ${entryYear} is finalized and locked.` });
+    }
+
+    if (isMonthClosed(entryYear, entryMonth, settings)) {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Dieser Monat ist abgeschlossen und schreibgeschützt. / This month is closed and locked for new entries.' });
+      }
+      return res.status(403).json({ success: false, message: `Monat ${String(entryMonth).padStart(2, '0')}/${entryYear} ist gesperrt. Bitte zuerst als Administrator entsperren. / Month ${String(entryMonth).padStart(2, '0')}/${entryYear} is locked. Please unlock it first.` });
     }
 
     if (type === 'expense') {
@@ -348,13 +362,16 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
     const entry = await CashBookEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Not found' });
 
-    if (isMonthClosed(entry.year, entry.month)) {
-      return res.status(403).json({ success: false, message: 'Buchungen aus vergangenen Monaten sind abgeschlossen und können nicht mehr bearbeitet werden. / Entries from past months are closed and cannot be edited.' });
-    }
-
     const settings = await Settings.findOne() || await Settings.create({});
     if (settings.finalizedYears?.includes(entry.year)) {
       return res.status(400).json({ success: false, message: `Geschäftsjahr ${entry.year} ist abgeschlossen und schreibgeschützt. / Fiscal year ${entry.year} is finalized and locked.` });
+    }
+
+    if (isMonthClosed(entry.year, entry.month, settings)) {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Buchungen aus abgeschlossenen Monaten können nicht bearbeitet werden. / Entries from closed months cannot be edited.' });
+      }
+      return res.status(403).json({ success: false, message: `Monat ${String(entry.month).padStart(2, '0')}/${entry.year} ist gesperrt. Bitte zuerst als Administrator entsperren. / Month ${String(entry.month).padStart(2, '0')}/${entry.year} is locked. Please unlock it first.` });
     }
 
     const oldDate = entry.date;
@@ -363,12 +380,15 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
     const newYear = newDate.getFullYear();
     const newMonth = newDate.getMonth() + 1;
 
-    if (isMonthClosed(newYear, newMonth)) {
-      return res.status(403).json({ success: false, message: 'Buchung kann nicht in einen vergangenen, abgeschlossenen Monat verschoben werden. / Cannot move entry into a closed past month.' });
-    }
-
     if (settings.finalizedYears?.includes(newYear)) {
       return res.status(400).json({ success: false, message: `Ziel-Geschäftsjahr ${newYear} ist abgeschlossen und schreibgeschützt. / Target fiscal year ${newYear} is finalized.` });
+    }
+
+    if (isMonthClosed(newYear, newMonth, settings)) {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Buchung kann nicht in einen gesperrten Monat verschoben werden. / Cannot move entry into a closed or locked month.' });
+      }
+      return res.status(403).json({ success: false, message: `Ziel-Monat ${String(newMonth).padStart(2, '0')}/${newYear} ist gesperrt. Bitte zuerst als Administrator entsperren. / Target month ${String(newMonth).padStart(2, '0')}/${newYear} is locked. Please unlock it first.` });
     }
 
     if (type === 'expense') {
@@ -463,13 +483,16 @@ router.delete('/:id', async (req: any, res, next) => {
     const entry = await CashBookEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Not found' });
 
-    if (isMonthClosed(entry.year, entry.month)) {
-      return res.status(403).json({ success: false, message: 'Buchungen aus vergangenen Monaten sind abgeschlossen und können nicht mehr gelöscht werden. / Entries from past months are closed and cannot be deleted.' });
-    }
-
     const settings = await Settings.findOne() || await Settings.create({});
     if (settings.finalizedYears?.includes(entry.year)) {
       return res.status(400).json({ success: false, message: `Geschäftsjahr ${entry.year} ist abgeschlossen und schreibgeschützt. / Fiscal year ${entry.year} is finalized and locked.` });
+    }
+
+    if (isMonthClosed(entry.year, entry.month, settings)) {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Buchungen aus abgeschlossenen Monaten können nicht gelöscht werden. / Entries from closed months cannot be deleted.' });
+      }
+      return res.status(403).json({ success: false, message: `Monat ${String(entry.month).padStart(2, '0')}/${entry.year} ist gesperrt. Bitte zuerst als Administrator entsperren. / Month ${String(entry.month).padStart(2, '0')}/${entry.year} is locked. Please unlock it first.` });
     }
 
     entry.isDeleted = true;

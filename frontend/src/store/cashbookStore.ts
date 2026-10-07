@@ -28,7 +28,11 @@ export const useCashbookStore = create<CashbookState>((set, get) => ({
       const monthToFetch = selectedMonth || new Date().getMonth() + 1;
       const params: Record<string, number> = { year: selectedYear, month: monthToFetch, limit: 500 };
       const res = await entriesApi.getEntries(params);
-      set({ entries: res.data.data.entries });
+      const rawEntries = res.data.data.entries || [];
+      const sortedEntries = [...rawEntries].sort((a, b) =>
+        (a.voucherNo || '').localeCompare(b.voucherNo || '', undefined, { numeric: true, sensitivity: 'base' })
+      );
+      set({ entries: sortedEntries });
     } catch (err) {
       console.error('fetchEntries error', err);
     } finally {

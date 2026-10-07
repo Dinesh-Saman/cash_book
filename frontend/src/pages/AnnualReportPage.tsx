@@ -70,8 +70,8 @@ export default function AnnualReportPage() {
             const totalExpense = (entries as CashBookEntry[])
               .filter((e: CashBookEntry) => e.type === 'expense')
               .reduce((s: number, e: CashBookEntry) => s + e.amount, 0);
-            const sortedEntries = [...(entries as CashBookEntry[])].sort(
-              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+            const sortedEntries = [...(entries as CashBookEntry[])].sort((a, b) =>
+              (a.voucherNo || '').localeCompare(b.voucherNo || '', undefined, { numeric: true, sensitivity: 'base' })
             );
             const endBalance =
               sortedEntries.length > 0 ? sortedEntries[sortedEntries.length - 1].cashBalance : 0;

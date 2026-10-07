@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CashBookEntry } from '../models/CashBookEntry';
 import { Settings } from '../models/Settings';
 import { authenticate } from '../middleware/auth';
+import { isMonthClosed } from './entries';
 
 const router = Router();
 router.use(authenticate);
@@ -30,7 +31,9 @@ router.get('/monthly', async (req, res, next) => {
     const priorEntry = await CashBookEntry.findOne({
       date: { $lt: filterStart },
       isDeleted: false
-    }).sort({ date: -1, createdAt: -1 });
+    })
+      .collation({ locale: 'en', numericOrdering: true })
+      .sort({ voucherNo: -1, date: -1, createdAt: -1 });
 
     const startBalance = priorEntry ? priorEntry.cashBalance : settings.openingBalance;
 
@@ -42,7 +45,8 @@ router.get('/monthly', async (req, res, next) => {
     const entries = await CashBookEntry
       .find(query)
       .populate('bookingRule')
-      .sort({ date: 1, createdAt: 1 });
+      .collation({ locale: 'en', numericOrdering: true })
+      .sort({ voucherNo: 1, date: 1, createdAt: 1 });
 
     const totalIncome = entries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
     const totalExpense = entries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0);
@@ -56,7 +60,8 @@ router.get('/monthly', async (req, res, next) => {
         totalIncome,
         totalExpense,
         endBalance,
-        isFinalized: settings.finalizedYears?.includes(numYear) || false
+        isFinalized: settings.finalizedYears?.includes(numYear) || false,
+        isMonthLocked: isMonthClosed(numYear, numMonth, settings)
       }
     });
   } catch (error) { next(error); }
@@ -71,7 +76,8 @@ router.get('/annual', async (req, res, next) => {
     const entries = await CashBookEntry
       .find({ year: numYear, isDeleted: false })
       .populate('bookingRule')
-      .sort({ date: 1, createdAt: 1 });
+      .collation({ locale: 'en', numericOrdering: true })
+      .sort({ voucherNo: 1, date: 1, createdAt: 1 });
 
     // Group by month
     const byMonth: Record<number, typeof entries> = {};

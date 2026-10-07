@@ -127,6 +127,14 @@ export default function AuditLogPage() {
       m = desc.match(/^Unlocked fiscal year\s+(\d+)$/i);
       if (m) return `Geschäftsjahr ${m[1]} entsperrt`;
 
+      // Unlocked month <MM/YYYY>
+      m = desc.match(/^Unlocked month\s+(\d{1,2}\/\d{4})$/i);
+      if (m) return `Monat ${m[1]} entsperrt`;
+
+      // Locked month <MM/YYYY>
+      m = desc.match(/^Locked month\s+(\d{1,2}\/\d{4})$/i);
+      if (m) return `Monat ${m[1]} gesperrt`;
+
       // Created booking rule "<name>" (<vat>% VAT)
       m = desc.match(/^Created booking rule\s+"([^"]+)"\s*\((\d+)%\s*VAT\)$/i);
       if (m) return `Buchungsregel „${m[1]}“ (${m[2]}% MwSt.) erstellt`;
@@ -177,6 +185,11 @@ export default function AuditLogPage() {
     if (m) return `Updated entry ${m[1] ? m[1] + ' ' : ''}(€ ${formatAmountStr(m[2], 'en')})`;
     m = desc.match(/^Eintrag\s*(?:„([^“]+)“\s*)?gelöscht$/i);
     if (m) return `Deleted entry ${m[1] || ''}`;
+
+    m = desc.match(/^Monat\s+(\d{1,2}\/\d{4})\s+entsperrt$/i);
+    if (m) return `Unlocked month ${m[1]}`;
+    m = desc.match(/^Monat\s+(\d{1,2}\/\d{4})\s+gesperrt$/i);
+    if (m) return `Locked month ${m[1]}`;
 
     return desc;
   };

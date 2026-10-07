@@ -131,6 +131,10 @@ export const settingsApi = {
     api.put<{ success: boolean; data: Settings }>('/settings', data),
   finalizeYear: (year: number, action: 'finalize' | 'unlock') =>
     api.post<{ success: boolean; data: Settings }>('/settings/finalize-year', { year, action }),
+  unlockMonth: (year: number, month: number, action: 'unlock' | 'lock') =>
+    api.post<{ success: boolean; data: Settings }>('/settings/lock-month', { year, month, action }),
+  lockMonth: (year: number, month: number, action: 'lock' | 'unlock') =>
+    api.post<{ success: boolean; data: Settings }>('/settings/lock-month', { year, month, action }),
 };
 
 // ─── Reports ─────────────────────────────────────────────────────────────────

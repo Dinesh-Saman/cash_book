@@ -59,7 +59,8 @@ async function getEntriesAndSettings(year?: string, month?: string, startDate?: 
   const entries = await CashBookEntry
     .find(query)
     .populate('bookingRule')
-    .sort({ date: 1, createdAt: 1 });
+    .collation({ locale: 'en', numericOrdering: true })
+    .sort({ voucherNo: 1, date: 1, createdAt: 1 });
 
   let periodLabel = month && month !== 'undefined' ? `${year}/${month}` : `${year || ''}`;
   if (startDate && endDate) {

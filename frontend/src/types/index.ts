@@ -102,11 +102,14 @@ export interface Settings {
   _id: string;
   openingBalance: number;
   openingBalanceDate: string;
+  cashAccount?: string;
   datevAdvisorNumber: string;
   datevClientNumber: string;
   datevChartOfAccounts: 'SKR03' | 'SKR04';
   isYearFinalized: boolean;
   finalizedYears: number[];
+  lockedMonths?: string[];
+  unlockedMonths?: string[];
 }
 
 export interface Summary {

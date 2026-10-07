@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -45,10 +45,11 @@ export default function SettingsPage() {
     ? getDefaultPermissions(user.role)
     : null;
 
-  const canManageSettings = userPerms?.canManageSettings ?? (user?.role === 'admin');
+  const canManageSettings = user?.role === 'admin' || Boolean(userPerms?.canManageSettings);
   const isAdmin = user?.role === 'admin' || canManageSettings;
-  const canManageOpeningBalance = userPerms?.canManageSettings ?? (user?.role === 'admin' || user?.role === 'accountant');
-  const { t, language } = useTranslation();
+  const canManageOpeningBalance = user?.role === 'admin' || user?.role === 'accountant' || Boolean(userPerms?.canManageSettings);
+  const isStrictAdmin = user?.role === 'admin';
+  const { t, language, getMonthName } = useTranslation();
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [bookingRules, setBookingRules] = useState<BookingRule[]>([]);
@@ -59,6 +60,8 @@ export default function SettingsPage() {
   // Opening balance form
   const [obAmount, setObAmount] = useState('');
   const [obDate, setObDate] = useState('');
+  const [cashAccount, setCashAccount] = useState('1000');
+  const cashAccountInputRef = useRef<HTMLInputElement>(null);
 
   // DATEV form
   const [advisorNum, setAdvisorNum] = useState('');
@@ -68,8 +71,6 @@ export default function SettingsPage() {
   // Booking rule form
   const [newRuleName, setNewRuleName] = useState('');
   const [newRuleVat, setNewRuleVat] = useState<0 | 7 | 19>(0);
-  const [newRuleSKR03, setNewRuleSKR03] = useState('');
-  const [newRuleSKR04, setNewRuleSKR04] = useState('');
   const [editingRule, setEditingRule] = useState<BookingRule | null>(null);
   const [editRuleName, setEditRuleName] = useState('');
   const [editRuleVat, setEditRuleVat] = useState<0 | 7 | 19>(0);
@@ -80,6 +81,13 @@ export default function SettingsPage() {
   const [selectedFinalizeYear, setSelectedFinalizeYear] = useState<number>(CURRENT_YEAR - 1);
   const [confirmFinalizeYear, setConfirmFinalizeYear] = useState<{ year: number; action: 'finalize' | 'unlock' } | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  // Month lock form
+  const [selectedMonthYear, setSelectedMonthYear] = useState<number>(CURRENT_YEAR);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(new Date().getMonth() + 1);
+  const [confirmMonthLock, setConfirmMonthLock] = useState<{ year: number; month: number; action: 'unlock' | 'lock' } | null>(null);
+  const [isMonthLocking, setIsMonthLocking] = useState(false);
+
 
   const fetchRules = async () => {
     setIsLoadingRules(true);
@@ -113,6 +121,7 @@ export default function SettingsPage() {
         setAdvisorNum(s.datevAdvisorNumber || '');
         setClientNum(s.datevClientNumber || '');
         setChartOfAccounts(s.datevChartOfAccounts || 'SKR04');
+        setCashAccount(s.cashAccount ? String(s.cashAccount) : '1000');
       })
       .catch(() => {});
     fetchRules();
@@ -147,8 +156,14 @@ export default function SettingsPage() {
     if (!canManageOpeningBalance) return;
     setIsSaving(true);
     try {
-      const res = await settingsApi.update({ openingBalance: parseFormattedAmount(obAmount), openingBalanceDate: obDate });
+      const accountToSave = cashAccount.trim() || '1000';
+      const res = await settingsApi.update({
+        openingBalance: parseFormattedAmount(obAmount),
+        openingBalanceDate: obDate,
+        cashAccount: accountToSave,
+      });
       setSettings(res.data.data);
+      setCashAccount(res.data.data.cashAccount || accountToSave);
       toast.success(t('btnSaveOpeningBalance'));
     } catch {
       toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
@@ -201,14 +216,10 @@ export default function SettingsPage() {
       const res = await bookingRulesApi.create({
         name: newRuleName.trim(),
         defaultVat: newRuleVat,
-        accountSKR03: newRuleSKR03.trim() || undefined,
-        accountSKR04: newRuleSKR04.trim() || undefined,
       } as any);
       setBookingRules((prev) => [...prev, res.data.data]);
       setNewRuleName('');
       setNewRuleVat(0);
-      setNewRuleSKR03('');
-      setNewRuleSKR04('');
       toast.success(t('btnAddRule'));
     } catch {
       toast.error(language === 'de' ? 'Fehler beim Hinzufügen' : 'Error adding');
@@ -275,8 +286,36 @@ export default function SettingsPage() {
     }
   };
 
+  const handleMonthLockAction = async () => {
+    if (!confirmMonthLock || !isStrictAdmin) return;
+    setIsMonthLocking(true);
+    try {
+      const res = await settingsApi.lockMonth(confirmMonthLock.year, confirmMonthLock.month, confirmMonthLock.action);
+      setSettings(res.data.data);
+      if (confirmMonthLock.action === 'unlock') {
+        toast.success(t('toastMonthUnlocked', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year }));
+      } else {
+        toast.success(t('toastMonthLocked', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year }));
+      }
+      setConfirmMonthLock(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Fehler beim Ändern des Monatsstatus' : 'Error updating month lock status'));
+    } finally {
+      setIsMonthLocking(false);
+    }
+  };
+
   const finalizedYears = settings?.finalizedYears || [];
   const isSelectedYearFinalized = finalizedYears.includes(selectedFinalizeYear);
+
+  const unlockedMonths = settings?.unlockedMonths || [];
+  const selectedMonthKey = `${selectedMonthYear}-${String(selectedMonthIndex).padStart(2, '0')}`;
+  const now = new Date();
+  const currentY = now.getFullYear();
+  const currentM = now.getMonth() + 1;
+  const isSelectedMonthPast = selectedMonthYear < currentY || (selectedMonthYear === currentY && selectedMonthIndex < currentM);
+  const isSelectedMonthUnlocked = isStrictAdmin && unlockedMonths.includes(selectedMonthKey);
+  const isSelectedMonthFinalized = finalizedYears.includes(selectedMonthYear);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -316,6 +355,46 @@ export default function SettingsPage() {
               disabled={!canManageOpeningBalance}
               className={inputClass}
             />
+          </FieldRow>
+          <FieldRow label={t('lblCashAccount')}>
+            <div className="space-y-1">
+              <div className="relative">
+                <input
+                  ref={cashAccountInputRef}
+                  type="text"
+                  value={cashAccount}
+                  onChange={(e) => setCashAccount(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  disabled={!canManageOpeningBalance}
+                  placeholder="1000"
+                  className={`${inputClass} font-mono font-semibold pr-10`}
+                />
+                {canManageOpeningBalance && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cashAccountInputRef.current?.focus();
+                      cashAccountInputRef.current?.select();
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                    title={t('btnEdit')}
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                <span>{t('cashAccountHelp')}</span>
+                {canManageOpeningBalance && cashAccount !== '1000' && (
+                  <button
+                    type="button"
+                    onClick={() => setCashAccount('1000')}
+                    className="text-brand-600 hover:text-brand-700 hover:underline font-semibold flex-shrink-0 ml-2"
+                  >
+                    {language === 'de' ? 'Standard (1000)' : 'Default (1000)'}
+                  </button>
+                )}
+              </div>
+            </div>
           </FieldRow>
           {canManageOpeningBalance && (
             <div className="flex justify-end pt-2">
@@ -515,17 +594,6 @@ export default function SettingsPage() {
                 placeholder={t('placeholderNewRule')}
                 className="w-full sm:flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
               />
-              <input
-                value={chartOfAccounts === 'SKR03' ? newRuleSKR03 : newRuleSKR04}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 8);
-                  if (chartOfAccounts === 'SKR03') setNewRuleSKR03(val);
-                  else setNewRuleSKR04(val);
-                }}
-                placeholder={chartOfAccounts === 'SKR03' ? 'Konto (z.B. 1200)' : 'Konto (z.B. 1800)'}
-                className="w-full sm:w-36 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
-                title={`${chartOfAccounts} Gegenkonto`}
-              />
               <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl flex-1 sm:flex-initial">
                   <span className="text-[11px] font-semibold text-slate-500">{t('thVat')}:</span>
@@ -611,7 +679,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
                   <span className="text-xs font-bold px-2 py-0.5 bg-brand-50 text-brand-700 border border-brand-200 rounded-md">
-                    {chartOfAccounts === 'SKR03' ? 'Konto 1600' : 'Konto 1000'}
+                    Konto {cashAccount || (chartOfAccounts === 'SKR03' ? '1600' : '1000')}
                   </span>
                   <p className="text-[11px] text-slate-600 font-medium">
                     {chartOfAccounts === 'SKR04' ? t('descSkr04') : t('descSkr03')}
@@ -701,6 +769,120 @@ export default function SettingsPage() {
         </Section>
       )}
 
+      {/* Past Month Unlocking (Admin only) */}
+      {isStrictAdmin && (
+        <Section title={t('secMonthUnlocking')}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {t('descMonthUnlocking')}
+            </p>
+
+            <FieldRow label={t('lblSelectMonthToUnlock')}>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={selectedMonthYear}
+                  onChange={(e) => setSelectedMonthYear(Number(e.target.value))}
+                  className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
+                >
+                  {FINALIZATION_YEARS.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedMonthIndex}
+                  onChange={(e) => setSelectedMonthIndex(Number(e.target.value))}
+                  className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500/20 shadow-xs"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                    const mKey = `${selectedMonthYear}-${String(m).padStart(2, '0')}`;
+                    const isMPast = selectedMonthYear < currentY || (selectedMonthYear === currentY && m < currentM);
+                    const isMUnlocked = isStrictAdmin && unlockedMonths.includes(mKey);
+                    const isMYearFinalized = finalizedYears.includes(selectedMonthYear);
+                    const labelStatus = isMYearFinalized
+                      ? '🔒 (Jahr abgeschlossen)'
+                      : isMUnlocked
+                      ? '🔓 (Entsperrt)'
+                      : isMPast
+                      ? '🔒 (Gesperrt)'
+                      : '';
+                    return (
+                      <option key={m} value={m}>
+                        {getMonthName(m)} {labelStatus}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {isSelectedMonthFinalized ? (
+                  <span className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold">
+                    🔒 {t('yearFinalizedBadge', { year: selectedMonthYear })}
+                  </span>
+                ) : isSelectedMonthUnlocked ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmMonthLock({ year: selectedMonthYear, month: selectedMonthIndex, action: 'lock' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                  >
+                    <Lock size={14} />
+                    {t('btnLockMonth')}
+                  </button>
+                ) : isSelectedMonthPast ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmMonthLock({ year: selectedMonthYear, month: selectedMonthIndex, action: 'unlock' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                  >
+                    <Unlock size={14} />
+                    {t('btnUnlockMonth')}
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold">
+                    ✓ Offen
+                  </span>
+                )}
+              </div>
+            </FieldRow>
+
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-xs font-semibold text-slate-700 mb-2">
+                {t('unlockedPastMonthsList')}
+              </p>
+              {unlockedMonths.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">{t('noneMonthsUnlocked')}</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {unlockedMonths.map((mKey) => {
+                    const [yStr, mStr] = mKey.split('-');
+                    const yr = Number(yStr);
+                    const mo = Number(mStr);
+                    return (
+                      <span
+                        key={mKey}
+                        className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold"
+                      >
+                        <Unlock size={12} className="text-emerald-600" />
+                        <span>{getMonthName(mo)} {yr}</span>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmMonthLock({ year: yr, month: mo, action: 'lock' })}
+                          className="hover:text-rose-600 transition-colors ml-1"
+                          title={t('btnLockMonth')}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
+
       {/* Confirmation Modal for Finalization */}
       {confirmFinalizeYear &&
         createPortal(
@@ -754,6 +936,66 @@ export default function SettingsPage() {
                     : confirmFinalizeYear.action === 'finalize'
                     ? t('btnFinalizeYear')
                     : t('btnUnfinalizeYear')}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Confirmation Modal for Month Lock / Unlock */}
+      {confirmMonthLock &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${confirmMonthLock.action === 'unlock' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                    {confirmMonthLock.action === 'unlock' ? <Unlock size={18} /> : <Lock size={18} />}
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {confirmMonthLock.action === 'unlock'
+                      ? t('confirmUnlockMonthTitle', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year })
+                      : t('confirmLockMonthTitle', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year })}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setConfirmMonthLock(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-6 space-y-3">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {confirmMonthLock.action === 'unlock'
+                    ? t('confirmUnlockMonthDesc', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year })
+                    : t('confirmLockMonthDesc', { month: getMonthName(confirmMonthLock.month), year: confirmMonthLock.year })}
+                </p>
+              </div>
+              <div className="flex gap-3 px-6 pb-6 pt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConfirmMonthLock(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+                >
+                  {t('btnCancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMonthLockAction}
+                  disabled={isMonthLocking}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors shadow-xs ${
+                    confirmMonthLock.action === 'unlock'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-slate-800 hover:bg-slate-900'
+                  }`}
+                >
+                  {isMonthLocking
+                    ? t('btnSaving')
+                    : confirmMonthLock.action === 'unlock'
+                    ? t('btnUnlockMonth')
+                    : t('btnLockMonth')}
                 </button>
               </div>
             </div>

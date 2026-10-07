@@ -550,7 +550,7 @@ export function exportToDatev(
   periodMonth?: number
 ): Buffer {
   const isSKR03 = settings.datevChartOfAccounts === 'SKR03';
-  const cashAccount = isSKR03 ? '1600' : '1000';
+  const cashAccount = (settings.cashAccount && settings.cashAccount.trim()) || (isSKR03 ? '1600' : '1000');
   const createdDate = format(new Date(), 'yyyyMMddHHmmssSSS');
 
   // Advisor Number: DATEV standard requires 1001 to 9999999 (4-7 digits)
