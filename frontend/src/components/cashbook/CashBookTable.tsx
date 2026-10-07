@@ -60,7 +60,7 @@ export default function CashBookTable({
 }: Props) {
   const { t, formatCurrency, formatDate, language } = useTranslation();
   const [downloadingEntryId, setDownloadingEntryId] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<'date' | 'voucherNo'>('date');
+  const [sortField, setSortField] = useState<'date' | 'voucherNo'>('voucherNo');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const handleSort = (field: 'date' | 'voucherNo') => {
@@ -75,7 +75,10 @@ export default function CashBookTable({
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
       const dir = sortDirection === 'desc' ? -1 : 1;
-      if (sortField === 'voucherNo') {
+      if (sortField === 'date') {
+        const timeA = new Date(a.date || 0).getTime();
+        const timeB = new Date(b.date || 0).getTime();
+        if (timeA !== timeB) return (timeA - timeB) * dir;
         const vA = (a.voucherNo || '').trim();
         const vB = (b.voucherNo || '').trim();
         if (vA && !vB) return -1 * dir;
@@ -84,16 +87,10 @@ export default function CashBookTable({
           const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
           if (cmp !== 0) return cmp * dir;
         }
-        const timeA = new Date(a.date || 0).getTime();
-        const timeB = new Date(b.date || 0).getTime();
-        if (timeA !== timeB) return (timeA - timeB) * dir;
         return (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) * dir;
       }
 
-      // Default: Date first, then Voucher Number
-      const timeA = new Date(a.date || 0).getTime();
-      const timeB = new Date(b.date || 0).getTime();
-      if (timeA !== timeB) return (timeA - timeB) * dir;
+      // Default: Voucher Number first, then Date
       const vA = (a.voucherNo || '').trim();
       const vB = (b.voucherNo || '').trim();
       if (vA && !vB) return -1 * dir;
@@ -102,6 +99,9 @@ export default function CashBookTable({
         const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
         if (cmp !== 0) return cmp * dir;
       }
+      const timeA = new Date(a.date || 0).getTime();
+      const timeB = new Date(b.date || 0).getTime();
+      if (timeA !== timeB) return (timeA - timeB) * dir;
       return (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) * dir;
     });
   }, [entries, sortField, sortDirection]);

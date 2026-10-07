@@ -8,8 +8,6 @@ dist/
 build/
 
 # Environment files
-.env
-.env.local
 .env.*.local
 *.env
 
@@ -31,10 +29,9 @@ yarn-debug.log*
 yarn-error.log*
 
 # Editor & OS files
-.vscode/
 .idea/
 .DS_Store
 Thumbs.db
 .vercel
-.env*
 DATEV_Format_Pruef_Programm*/
+config.bat
