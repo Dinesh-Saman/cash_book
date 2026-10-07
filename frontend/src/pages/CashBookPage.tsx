@@ -161,143 +161,145 @@ export default function CashBookPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-30">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 relative z-30">
         <div className="text-center sm:text-left w-full sm:w-auto">
-          <div className="flex items-center justify-center sm:justify-start gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {t('cashBookTitle')} {selectedYear}
-            </h1>
-            {isYearFinalized ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold">
-                🔒 {t('yearFinalizedBadge', { year: selectedYear })}
-              </span>
-            ) : isMonthLocked ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold">
-                🔒 {t('monthClosedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
-              </span>
-            ) : isPastMonth && isMonthUnlocked ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold">
-                🔓 {t('monthUnlockedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
-              </span>
-            ) : null}
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            {t('cashBookTitle')} {selectedYear}
+          </h1>
           <p className="text-sm font-medium text-slate-500 mt-0.5">
             {t('lblMonthlyView')}: {getMonthName(selectedMonth)} {selectedYear}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-          {canAddIncome && (
-            <button
-              onClick={openIncomeForm}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
-            >
-              <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
-              <span>{t('btnAddIncome')}</span>
-            </button>
-          )}
-
-          {canAddExpense && (
-            <button
-              onClick={openExpenseForm}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
-            >
-              <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
-              <span>{t('btnAddExpense')}</span>
-            </button>
-          )}
-
-          {canManageSettings && (
-            <button
-              onClick={() => setShowOpeningBalance(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
-              title={t('modalOpeningBalanceTitle')}
-            >
-              <Scale size={16} className="text-amber-700 flex-shrink-0" />
-              <span>{t('tblOpeningBalance')}</span>
-            </button>
-          )}
-
-          {/* Admin Button to Lock / Unlock Past Month */}
-          {isAdmin && !isYearFinalized && isPastMonth && (
-            <button
-              type="button"
-              onClick={() =>
-                setConfirmMonthModal({
-                  year: selectedYear,
-                  month: selectedMonth,
-                  action: isMonthLocked ? 'unlock' : 'lock',
-                })
-              }
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0 ${
-                isMonthLocked
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300'
-              }`}
-              title={isMonthLocked ? t('btnUnlockMonth') : t('btnLockMonth')}
-            >
-              {isMonthLocked ? (
-                <>
-                  <Unlock size={15} className="text-amber-700 flex-shrink-0" />
-                  <span>{t('btnUnlockMonth')}</span>
-                </>
-              ) : (
-                <>
-                  <Lock size={15} className="text-slate-700 flex-shrink-0" />
-                  <span>{t('btnLockMonth')}</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {isYearFinalized && (canAddIncome || canAddExpense || canEditEntry) && (
-            <span className="px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold whitespace-nowrap">
-              🔒 {selectedYear}
-            </span>
-          )}
-
-          {/* Export Dropdown */}
-          {canExport && (
-            <div className="flex-1 sm:flex-initial relative z-50 min-w-0">
+        <div className="flex flex-col items-center sm:items-end gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap justify-center sm:justify-end">
+            {canAddIncome && (
               <button
-                onClick={() => setShowExportMenu((prev) => !prev)}
-                disabled={isExporting}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs sm:text-sm font-semibold transition-all border border-slate-200 shadow-xs whitespace-nowrap min-w-0"
+                onClick={openIncomeForm}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
               >
-                <Download size={15} className="text-brand-600 flex-shrink-0" />
-                <span>{isExporting ? t('btnExporting') : t('btnExport')}</span>
+                <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
+                <span>{t('btnAddIncome')}</span>
               </button>
-              {showExportMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowExportMenu(false)}
-                  />
-                  <div className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
-                    {[
-                      { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
-                      {
-                        icon: FileSpreadsheet,
-                        label: t('exportExcel'),
-                        fn: () => handleExport('excel'),
-                      },
-                      { icon: FileCode, label: t('exportXml'), fn: () => handleExport('xml') },
-                      { icon: FileCsv, label: t('exportDatev'), fn: () => handleExport('datev') },
-                    ].map((item) => (
-                      <button
-                        key={item.label}
-                        onClick={item.fn}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors text-left"
-                      >
-                        <item.icon size={16} className="text-brand-600" />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+            )}
+
+            {canAddExpense && (
+              <button
+                onClick={openExpenseForm}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
+              >
+                <Plus size={16} className="stroke-[2.5] flex-shrink-0" />
+                <span>{t('btnAddExpense')}</span>
+              </button>
+            )}
+
+            {canManageSettings && (
+              <button
+                onClick={() => setShowOpeningBalance(true)}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0"
+                title={t('modalOpeningBalanceTitle')}
+              >
+                <Scale size={16} className="text-amber-700 flex-shrink-0" />
+                <span>{t('tblOpeningBalance')}</span>
+              </button>
+            )}
+
+            {/* Admin Button to Lock / Unlock Past Month */}
+            {isAdmin && !isYearFinalized && isPastMonth && (
+              <button
+                type="button"
+                onClick={() =>
+                  setConfirmMonthModal({
+                    year: selectedYear,
+                    month: selectedMonth,
+                    action: isMonthLocked ? 'unlock' : 'lock',
+                  })
+                }
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all whitespace-nowrap min-w-0 ${
+                  isMonthLocked
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300'
+                }`}
+                title={isMonthLocked ? t('btnUnlockMonth') : t('btnLockMonth')}
+              >
+                {isMonthLocked ? (
+                  <>
+                    <Unlock size={15} className="text-amber-700 flex-shrink-0" />
+                    <span>{t('btnUnlockMonth')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock size={15} className="text-slate-700 flex-shrink-0" />
+                    <span>{t('btnLockMonth')}</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {isYearFinalized && (canAddIncome || canAddExpense || canEditEntry) && (
+              <span className="px-3 sm:px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold whitespace-nowrap">
+                🔒 {selectedYear}
+              </span>
+            )}
+
+            {/* Export Dropdown */}
+            {canExport && (
+              <div className="flex-1 sm:flex-initial relative z-50 min-w-0">
+                <button
+                  onClick={() => setShowExportMenu((prev) => !prev)}
+                  disabled={isExporting}
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl text-xs sm:text-sm font-semibold transition-all border border-slate-200 shadow-xs whitespace-nowrap min-w-0"
+                >
+                  <Download size={15} className="text-brand-600 flex-shrink-0" />
+                  <span>{isExporting ? t('btnExporting') : t('btnExport')}</span>
+                </button>
+                {showExportMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowExportMenu(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
+                      {[
+                        { icon: FileText, label: t('exportPdf'), fn: () => handleExport('pdf') },
+                        {
+                          icon: FileSpreadsheet,
+                          label: t('exportExcel'),
+                          fn: () => handleExport('excel'),
+                        },
+                        { icon: FileCode, label: t('exportXml'), fn: () => handleExport('xml') },
+                        { icon: FileCsv, label: t('exportDatev'), fn: () => handleExport('datev') },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          onClick={item.fn}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition-colors text-left"
+                        >
+                          <item.icon size={16} className="text-brand-600" />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Month / Year Lock Status Badge below buttons */}
+          {isYearFinalized ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold whitespace-nowrap shadow-xs">
+              🔒 {t('yearFinalizedBadge', { year: selectedYear })}
+            </span>
+          ) : isMonthLocked ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold whitespace-nowrap shadow-xs">
+              🔒 {t('monthClosedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
+            </span>
+          ) : isPastMonth && isMonthUnlocked ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold whitespace-nowrap shadow-xs">
+              🔓 {t('monthUnlockedBadge', { month: getMonthName(selectedMonth), year: selectedYear })}
+            </span>
+          ) : null}
         </div>
       </div>
 
