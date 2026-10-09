@@ -98,6 +98,10 @@ router.get('/', async (req: any, res, next) => {
   } catch (error) { next(error); }
 });
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ─── POST / ──────────────────────────────────────────────────────────────────
 
 router.post('/', authorize('admin', 'accountant'), async (req: any, res, next) => {
@@ -106,10 +110,26 @@ router.post('/', authorize('admin', 'accountant'), async (req: any, res, next) =
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Rule name is required' });
     }
+
+    const trimmedName = name.trim();
+    const existingRule = await BookingRule.findOne({
+      isActive: true,
+      name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') },
+    });
+    if (existingRule) {
+      const lang = req.headers['accept-language']?.toLowerCase().startsWith('en') ? 'en' : 'de';
+      return res.status(400).json({
+        success: false,
+        message:
+          lang === 'de'
+            ? 'Diese Buchungsregel existiert bereits. Sie können dieselbe Buchungsregel nicht erneut hinzufügen.'
+            : 'You cannot add the same booking rule again.',
+      });
+    }
+
     const parsedVat = [0, 7, 19].includes(Number(defaultVat)) ? Number(defaultVat) : 0;
     const ruleNumber = await getNextRuleNumber();
 
-    const trimmedName = name.trim();
     const defaultMapping = DEFAULT_CONTRA_ACCOUNTS[trimmedName];
     const skr03 = accountSKR03 ? String(accountSKR03).trim() : (defaultMapping?.skr03 || '1360');
     const skr04 = accountSKR04 ? String(accountSKR04).trim() : (defaultMapping?.skr04 || '1360');
@@ -145,7 +165,27 @@ router.put('/:id', authorize('admin'), async (req: any, res, next) => {
     if (!rule) return res.status(404).json({ success: false, message: 'Rule not found' });
 
     // Only allow name, defaultVat, accountSKR03, accountSKR04 to be changed — ruleNumber is immutable
-    if (name) rule.name = name.trim();
+    if (name) {
+      const trimmedName = name.trim();
+      if (trimmedName.toLowerCase() !== rule.name.trim().toLowerCase()) {
+        const existingRule = await BookingRule.findOne({
+          _id: { $ne: req.params.id },
+          isActive: true,
+          name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') },
+        });
+        if (existingRule) {
+          const lang = req.headers['accept-language']?.toLowerCase().startsWith('en') ? 'en' : 'de';
+          return res.status(400).json({
+            success: false,
+            message:
+              lang === 'de'
+                ? 'Diese Buchungsregel existiert bereits. Sie können dieselbe Buchungsregel nicht erneut hinzufügen.'
+                : 'You cannot add the same booking rule again.',
+          });
+        }
+      }
+      rule.name = trimmedName;
+    }
     if (defaultVat !== undefined && [0, 7, 19].includes(Number(defaultVat))) {
       rule.defaultVat = Number(defaultVat) as 0 | 7 | 19;
     }

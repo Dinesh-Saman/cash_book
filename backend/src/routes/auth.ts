@@ -22,12 +22,18 @@ router.post('/login', async (req, res, next) => {
       ]
     });
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Ungültiger Benutzername/E-Mail oder Passwort / Invalid username/email or password'
+      });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Ungültiger Benutzername/E-Mail oder Passwort / Invalid username/email or password'
+      });
     }
 
     if (!user.isActive) {

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
-import { authApi } from '../lib/api';
+import { authApi, api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import LanguageToggle from '../components/ui/LanguageToggle';
@@ -19,6 +19,11 @@ export default function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const { t, language } = useTranslation();
   const navigate = useNavigate();
+
+  // Pre-warm backend and MongoDB connection on cold start
+  useEffect(() => {
+    api.get('/health').catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +45,21 @@ export default function LoginPage() {
         const disabledMsg = t('accountDisabled');
         setError(disabledMsg);
         toast.error(disabledMsg);
+      } else if (err?.response?.status === 401) {
+        const msg =
+          err?.response?.data?.message ||
+          (language === 'de'
+            ? 'Ungültiger Benutzername/E-Mail oder Passwort'
+            : 'Invalid username/email or password');
+        setError(msg);
+        toast.error(language === 'de' ? 'Anmeldung fehlgeschlagen' : 'Login failed');
+      } else if (!err?.response || err?.response?.status >= 500) {
+        const serverMsg =
+          language === 'de'
+            ? 'Server wird initialisiert oder ist nicht erreichbar. Bitte versuchen Sie es in Kürze erneut.'
+            : 'Server is starting up or temporarily unreachable. Please try again in a moment.';
+        setError(serverMsg);
+        toast.error(serverMsg);
       } else {
         const msg =
           err?.response?.data?.message ||

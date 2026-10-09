@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { FileText, Edit2, Trash2, Eye, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { CashBookEntry } from '../../types';
@@ -36,6 +36,21 @@ const VAT_COLORS: Record<number, string> = {
   7: 'bg-blue-50 text-blue-700 border border-blue-200/80 font-semibold',
   19: 'bg-brand-50 text-brand-700 border border-brand-200/80 font-semibold',
 };
+
+const MOBILE_COLUMNS = [
+  { key: 'thVoucherNo', width: 100, align: 'text-left', sortKey: 'voucherNo' as const },
+  { key: 'thDate', width: 95, align: 'text-left', sortKey: 'date' as const },
+  { key: 'thIncome', width: 110, align: 'text-right' },
+  { key: 'thExpense', width: 110, align: 'text-right' },
+  { key: 'thBookingRule', width: 180, align: 'text-left' },
+  { key: 'thBookingText', width: 180, align: 'text-left' },
+  { key: 'thVat', width: 65, align: 'text-center' },
+  { key: 'thContraAccountColH', width: 90, align: 'text-center' },
+  { key: 'thBalance', width: 115, align: 'text-right' },
+  { key: 'thDocument', width: 85, align: 'text-center' },
+  { key: 'thActions', width: 80, align: 'text-center' },
+];
+const MOBILE_TABLE_WIDTH = MOBILE_COLUMNS.reduce((sum, col) => sum + col.width, 0); // 1210px
 
 function isEntryClosed(entryDateStr: string): boolean {
   const d = new Date(entryDateStr);
@@ -119,6 +134,123 @@ export default function CashBookTable({
       toast.error(err?.message || (language === 'de' ? 'Fehler beim Herunterladen des PDF' : 'Failed to download PDF'), { id: toastId });
     } finally {
       setDownloadingEntryId(null);
+    }
+  };
+
+  const [isSticky, setIsSticky] = useState(false);
+  const [floatingPos, setFloatingPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const mobileTableRef = useRef<HTMLTableElement>(null);
+  const mobileContainerRef = useRef<HTMLDivElement>(null);
+  const mobileFloatingHeaderRef = useRef<HTMLDivElement>(null);
+
+  const isStickyRef = useRef(false);
+  const isSyncingScroll = useRef(false);
+
+  useEffect(() => {
+    // Floating sticky header on outer scroll is mobile-only (< 768px)
+    if (window.innerWidth >= 768) {
+      if (isStickyRef.current) {
+        isStickyRef.current = false;
+        setIsSticky(false);
+      }
+      return;
+    }
+
+    const mainEl = mobileContainerRef.current?.closest('main');
+    if (!mainEl) return;
+
+    const measureAndSync = () => {
+      if (window.innerWidth >= 768) {
+        if (isStickyRef.current) {
+          isStickyRef.current = false;
+          setIsSticky(false);
+        }
+        return;
+      }
+
+      const activeTable = mobileTableRef.current;
+      const activeContainer = mobileContainerRef.current;
+      const activeFloating = mobileFloatingHeaderRef.current;
+      if (!activeTable || !activeContainer) return;
+
+      const theadEl = activeTable.querySelector('thead');
+      if (!theadEl) return;
+
+      const theadRect = theadEl.getBoundingClientRect();
+      const tableRect = activeTable.getBoundingClientRect();
+      const containerRect = activeContainer.getBoundingClientRect();
+      const mainRect = mainEl.getBoundingClientRect();
+
+      // Find mobile actions bar if present to dock directly underneath it
+      const actionsBarEl = mainEl.querySelector('[data-mobile-actions-bar]');
+      const rawDockTop = actionsBarEl ? actionsBarEl.getBoundingClientRect().bottom : mainRect.top;
+      const dockTop = Math.floor(rawDockTop);
+
+      // Floating header activates when real table header reaches dockTop (under actions bar or SummaryBar)
+      // and stays active as long as table rows are visible in the viewport
+      const shouldBeSticky = theadRect.top <= dockTop && tableRect.bottom > dockTop + 45;
+
+      if (shouldBeSticky) {
+        setFloatingPos({
+          top: dockTop,
+          left: containerRect.left,
+          width: containerRect.width,
+        });
+
+        if (activeFloating && !isSyncingScroll.current) {
+          activeFloating.scrollLeft = activeContainer.scrollLeft;
+        }
+      }
+
+      if (shouldBeSticky !== isStickyRef.current) {
+        isStickyRef.current = shouldBeSticky;
+        setIsSticky(shouldBeSticky);
+      }
+    };
+
+    const handleScroll = () => {
+      measureAndSync();
+    };
+
+    const handleResize = () => {
+      measureAndSync();
+    };
+
+    mainEl.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    const resizeObserver = new ResizeObserver(() => {
+      measureAndSync();
+    });
+    if (mobileContainerRef.current) resizeObserver.observe(mobileContainerRef.current);
+
+    measureAndSync();
+
+    return () => {
+      mainEl.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+    };
+  }, [entries, isLoading, language, sortField, sortDirection]);
+
+  const handleMobileScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isSyncingScroll.current) return;
+    if (mobileFloatingHeaderRef.current) {
+      isSyncingScroll.current = true;
+      mobileFloatingHeaderRef.current.scrollLeft = e.currentTarget.scrollLeft;
+      isSyncingScroll.current = false;
+    }
+  };
+
+  const handleMobileFloatingScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isSyncingScroll.current) return;
+    if (mobileContainerRef.current) {
+      isSyncingScroll.current = true;
+      mobileContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+      isSyncingScroll.current = false;
     }
   };
 
@@ -385,9 +517,56 @@ export default function CashBookTable({
         </table>
       </div>
 
-      {/* MOBILE VIEW (< md screens) - Order: Date -> Income -> Expense -> Rule -> Text -> VAT -> Balance -> Voucher No -> Document -> Actions */}
-      <div className="block md:hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-card">
-        <table className="w-full text-sm text-slate-700 text-left border-collapse">
+    {/* MOBILE VIEW (< md screens) - Order: Voucher No -> Date -> Income -> Expense -> Booking Rule -> Booking Text -> VAT -> Column H -> Balance -> Document -> Actions */}
+    <div className="block md:hidden">
+      {/* Floating sticky header when outer scroller scrolls down */}
+      <div
+        ref={mobileFloatingHeaderRef}
+        onScroll={handleMobileFloatingScroll}
+        style={{
+          position: 'fixed',
+          top: floatingPos.top,
+          left: floatingPos.left,
+          width: floatingPos.width,
+          display: isSticky ? 'block' : 'none',
+          zIndex: 35,
+        }}
+        className="overflow-x-auto bg-slate-100 border-x border-b border-slate-300 shadow-md no-scrollbar"
+      >
+        <table
+          style={{ width: MOBILE_TABLE_WIDTH, minWidth: MOBILE_TABLE_WIDTH, tableLayout: 'fixed' }}
+          className="text-sm text-slate-700 text-left border-collapse"
+        >
+          <colgroup>
+            {MOBILE_COLUMNS.map((col) => (
+              <col key={col.key} style={{ width: col.width }} />
+            ))}
+          </colgroup>
+          <MobileTableHeader
+            t={t}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+          />
+        </table>
+      </div>
+
+      {/* Real Table */}
+      <div
+        ref={mobileContainerRef}
+        onScroll={handleMobileScroll}
+        className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-card"
+      >
+        <table
+          ref={mobileTableRef}
+          style={{ width: MOBILE_TABLE_WIDTH, minWidth: MOBILE_TABLE_WIDTH, tableLayout: 'fixed' }}
+          className="text-sm text-slate-700 text-left border-collapse"
+        >
+          <colgroup>
+            {MOBILE_COLUMNS.map((col) => (
+              <col key={col.key} style={{ width: col.width }} />
+            ))}
+          </colgroup>
           <MobileTableHeader t={t} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
           <tbody className="divide-y divide-slate-100">
             {/* Opening Balance Row */}
@@ -624,6 +803,7 @@ export default function CashBookTable({
           )}
         </table>
       </div>
+    </div>
     </>
   );
 }
@@ -649,6 +829,7 @@ interface HeaderProps {
   sortField?: 'date' | 'voucherNo';
   sortDirection?: 'asc' | 'desc';
   onSort?: (field: 'date' | 'voucherNo') => void;
+  colWidths?: number[];
 }
 
 function DesktopTableHeader({ t, sortField, sortDirection, onSort }: HeaderProps) {
@@ -698,33 +879,19 @@ function DesktopTableHeader({ t, sortField, sortDirection, onSort }: HeaderProps
 }
 
 function MobileTableHeader({ t, sortField, sortDirection, onSort }: HeaderProps) {
-  // Mobile Order: Voucher No -> Date -> Income -> Expense -> Booking Rule -> Booking Text -> VAT -> Column H -> Balance -> Document -> Actions
-  const headers = [
-    { key: 'thVoucherNo', align: 'text-left', sortKey: 'voucherNo' as const },
-    { key: 'thDate', align: 'text-left', sortKey: 'date' as const },
-    { key: 'thIncome', align: 'text-right' },
-    { key: 'thExpense', align: 'text-right' },
-    { key: 'thBookingRule', align: 'text-left' },
-    { key: 'thBookingText', align: 'text-left' },
-    { key: 'thVat', align: 'text-center' },
-    { key: 'thContraAccountColH', align: 'text-center' },
-    { key: 'thBalance', align: 'text-right' },
-    { key: 'thDocument', align: 'text-center' },
-    { key: 'thActions', align: 'text-center' },
-  ];
-
   return (
     <thead>
-      <tr className="bg-slate-50/80 border-b border-slate-200">
-        {headers.map((h) => {
+      <tr className="bg-slate-100 border-b border-slate-200">
+        {MOBILE_COLUMNS.map((h) => {
           const isSorted = h.sortKey && sortField === h.sortKey;
           return (
             <th
               key={h.key}
               onClick={() => h.sortKey && onSort?.(h.sortKey)}
+              style={{ width: h.width, minWidth: h.width, maxWidth: h.width }}
               className={cn(
-                'px-3.5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap',
-                h.sortKey && 'cursor-pointer select-none hover:bg-slate-100/90 transition-colors',
+                'px-3.5 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap border-b border-slate-200',
+                h.sortKey && 'cursor-pointer select-none hover:bg-slate-200 transition-colors',
                 h.align
               )}
             >

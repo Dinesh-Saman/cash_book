@@ -211,27 +211,44 @@ export default function SettingsPage() {
 
   const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRuleName.trim()) return;
+    const trimmed = newRuleName.trim();
+    if (!trimmed) return;
+
+    if (bookingRules.some((r) => r.name.trim().toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(t('errDuplicateBookingRule'));
+      return;
+    }
+
     try {
       const res = await bookingRulesApi.create({
-        name: newRuleName.trim(),
+        name: trimmed,
         defaultVat: newRuleVat,
       } as any);
       setBookingRules((prev) => [...prev, res.data.data]);
       setNewRuleName('');
       setNewRuleVat(0);
       toast.success(t('btnAddRule'));
-    } catch {
-      toast.error(language === 'de' ? 'Fehler beim Hinzufügen' : 'Error adding');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Fehler beim Hinzufügen' : 'Error adding'));
     }
   };
 
   const handleEditRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRule || !editRuleName.trim()) return;
+    const trimmed = editRuleName.trim();
+
+    if (
+      trimmed.toLowerCase() !== editingRule.name.trim().toLowerCase() &&
+      bookingRules.some((r) => r._id !== editingRule._id && r.name.trim().toLowerCase() === trimmed.toLowerCase())
+    ) {
+      toast.error(t('errDuplicateBookingRule'));
+      return;
+    }
+
     try {
       const res = await bookingRulesApi.update(editingRule._id, {
-        name: editRuleName.trim(),
+        name: trimmed,
         defaultVat: editRuleVat,
         accountSKR03: editRuleSKR03.trim(),
         accountSKR04: editRuleSKR04.trim(),
@@ -241,8 +258,8 @@ export default function SettingsPage() {
       );
       setEditingRule(null);
       toast.success(t('btnUpdate'));
-    } catch {
-      toast.error(language === 'de' ? 'Fehler beim Aktualisieren' : 'Error updating');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Fehler beim Aktualisieren' : 'Error updating'));
     }
   };
 
@@ -318,7 +335,7 @@ export default function SettingsPage() {
   const isSelectedMonthFinalized = finalizedYears.includes(selectedMonthYear);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pt-4 md:pt-0">
       <div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           {t('settingsTitle')}

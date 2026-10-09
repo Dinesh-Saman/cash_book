@@ -43,8 +43,37 @@ api.interceptors.response.use(
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (email: string, password: string) =>
-    api.post<{ success: boolean; data: { token: string; user: User } }>('/auth/login', { email, password }),
+  login: async (email: string, password: string) => {
+    let lastError: any = null;
+    const maxRetries = 2; // Up to 2 retries (total 3 attempts) for cold-starts/DB waking up
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await api.post<{ success: boolean; data: { token: string; user: User } }>(
+          '/auth/login',
+          { email, password },
+          { timeout: 25000 }
+        );
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.response?.status;
+        // Only retry on network errors, gateway/proxy errors (502/503/504), or cold-start 500 errors
+        // Do NOT retry on 401 Unauthorized (wrong password), 400 Bad Request, or 403 Forbidden
+        const isRecoverable =
+          !err?.response ||
+          status === 502 ||
+          status === 503 ||
+          status === 504 ||
+          (status === 500 && attempt < maxRetries);
+
+        if (isRecoverable && attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError;
+  },
   me: () =>
     api.get<{ success: boolean; data: User }>('/auth/me'),
   register: (data: { name: string; email: string; password: string; role: string }) =>

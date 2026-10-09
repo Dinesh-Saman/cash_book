@@ -28,8 +28,11 @@ app.use(cors({
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Health check endpoint (responds immediately)
+// Health check endpoint (responds immediately and warms up DB connection if needed)
 app.get('/api/health', (_req, res) => {
+  if (mongoose.connection.readyState !== 1) {
+    connectDB().catch((err) => console.warn('Background connectDB error from health check:', err));
+  }
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),

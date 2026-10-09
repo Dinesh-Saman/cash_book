@@ -164,10 +164,17 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
   };
 
   const handleAddNewRule = async () => {
-    if (!newRuleName.trim()) return;
+    const trimmed = newRuleName.trim();
+    if (!trimmed) return;
+
+    if (bookingRules.some((r) => r.name.trim().toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(t('errDuplicateBookingRule'));
+      return;
+    }
+
     try {
       const res = await bookingRulesApi.create({
-        name: newRuleName.trim(),
+        name: trimmed,
         defaultVat: newRuleVat,
       });
       const newRule = res.data.data;
@@ -178,8 +185,8 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       setNewRuleName('');
       setNewRuleVat(0);
       toast.success(t('btnSave'));
-    } catch {
-      toast.error(language === 'de' ? 'Fehler beim Speichern' : 'Error saving');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Fehler beim Speichern' : 'Error saving'));
     }
   };
 
