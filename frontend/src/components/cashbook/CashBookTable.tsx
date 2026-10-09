@@ -529,7 +529,7 @@ export default function CashBookTable({
           left: floatingPos.left,
           width: floatingPos.width,
           display: isSticky ? 'block' : 'none',
-          zIndex: 35,
+          zIndex: 30,
         }}
         className="overflow-x-auto bg-slate-100 border-x border-b border-slate-300 shadow-md no-scrollbar"
       >

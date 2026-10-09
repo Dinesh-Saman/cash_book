@@ -165,7 +165,7 @@ export default function CashBookPage() {
       {/* Mobile Sticky Control Deck (< md screens) */}
       <div
         data-mobile-actions-bar
-        className="md:hidden sticky top-0 z-25 bg-slate-50 -mx-4 px-3.5 pt-2.5 pb-2.5 border-b border-slate-200 shadow-xs space-y-2 before:absolute before:-top-16 before:left-0 before:right-0 before:h-16 before:bg-slate-50 before:pointer-events-none"
+        className="md:hidden sticky top-0 z-40 bg-slate-50 -mx-4 px-3.5 pt-2.5 pb-2.5 border-b border-slate-200 shadow-xs space-y-2 before:absolute before:-top-16 before:left-0 before:right-0 before:h-16 before:bg-slate-50 before:pointer-events-none"
       >
         {/* Row 1: Action buttons (+ Income, + Expense, Lock/Unlock Month, Export) */}
         <div className="flex items-center gap-1.5 justify-between">
