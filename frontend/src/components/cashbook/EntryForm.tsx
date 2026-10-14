@@ -101,9 +101,12 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       .getSummary()
       .then((res) => setCurrentBalance(res.data.data.currentBalance))
       .catch(() => {});
-    if (!isEdit) {
+  }, [isEdit]);
+
+  useEffect(() => {
+    if (!isEdit && date) {
       entriesApi
-        .getNextVoucherNo()
+        .getNextVoucherNo(date)
         .then((res) => {
           if (res.data?.data?.nextVoucherNo) {
             setVoucherNo(res.data.data.nextVoucherNo);
@@ -111,7 +114,7 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
         })
         .catch(() => {});
     }
-  }, [isEdit]);
+  }, [isEdit, date]);
 
   useEffect(() => {
     setIsHistorical(date < today);

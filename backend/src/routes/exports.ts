@@ -60,7 +60,7 @@ async function getEntriesAndSettings(year?: string, month?: string, startDate?: 
     .find(query)
     .populate('bookingRule')
     .collation({ locale: 'en', numericOrdering: true })
-    .sort({ voucherNo: 1, date: 1, createdAt: 1 });
+    .sort({ date: 1, voucherNo: 1, createdAt: 1 });
 
   let periodLabel = month && month !== 'undefined' ? `${year}/${month}` : `${year || ''}`;
   if (startDate && endDate) {
