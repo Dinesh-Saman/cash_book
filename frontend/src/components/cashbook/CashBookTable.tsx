@@ -75,7 +75,7 @@ export default function CashBookTable({
 }: Props) {
   const { t, formatCurrency, formatDate, language } = useTranslation();
   const [downloadingEntryId, setDownloadingEntryId] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<'date' | 'voucherNo'>('voucherNo');
+  const [sortField, setSortField] = useState<'date' | 'voucherNo'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const handleSort = (field: 'date' | 'voucherNo') => {

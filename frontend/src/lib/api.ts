@@ -92,8 +92,10 @@ export const entriesApi = {
     api.delete<{ success: boolean }>(`/entries/${id}`),
   getSummary: () =>
     api.get<{ success: boolean; data: Summary }>('/entries/summary'),
-  getNextVoucherNo: () =>
-    api.get<{ success: boolean; data: { nextVoucherNo: string } }>('/entries/next-voucher-no'),
+  getNextVoucherNo: (date?: string) =>
+    api.get<{ success: boolean; data: { nextVoucherNo: string } }>('/entries/next-voucher-no', {
+      params: date ? { date } : undefined,
+    }),
   downloadMergedPDF: async (entryId: string, voucherNo?: string) => {
     const response = await api.get(`/entries/${entryId}/merged-pdf`, { responseType: 'blob' });
     if (response.data && response.data.type === 'application/json') {
