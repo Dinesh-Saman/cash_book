@@ -144,9 +144,9 @@ export const documentsApi = {
 export const bookingRulesApi = {
   getAll: () =>
     api.get<{ success: boolean; data: BookingRule[] }>('/booking-rules'),
-  create: (data: { name: string; defaultVat?: number }) =>
+  create: (data: { name: string; defaultVat?: number; accountSKR03?: string; accountSKR04?: string }) =>
     api.post<{ success: boolean; data: BookingRule }>('/booking-rules', data),
-  update: (id: string, data: { name: string; defaultVat?: number }) =>
+  update: (id: string, data: { name: string; defaultVat?: number; accountSKR03?: string; accountSKR04?: string }) =>
     api.put<{ success: boolean; data: BookingRule }>(`/booking-rules/${id}`, data),
   delete: (id: string) =>
     api.delete<{ success: boolean }>(`/booking-rules/${id}`),

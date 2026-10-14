@@ -70,6 +70,7 @@ export default function SettingsPage() {
 
   // Booking rule form
   const [newRuleName, setNewRuleName] = useState('');
+  const [newRuleAccount, setNewRuleAccount] = useState('');
   const [newRuleVat, setNewRuleVat] = useState<0 | 7 | 19>(0);
   const [editingRule, setEditingRule] = useState<BookingRule | null>(null);
   const [editRuleName, setEditRuleName] = useState('');
@@ -219,13 +220,17 @@ export default function SettingsPage() {
       return;
     }
 
+    const accountVal = newRuleAccount.trim();
     try {
       const res = await bookingRulesApi.create({
         name: trimmed,
         defaultVat: newRuleVat,
-      } as any);
+        accountSKR03: accountVal || undefined,
+        accountSKR04: accountVal || undefined,
+      });
       setBookingRules((prev) => [...prev, res.data.data]);
       setNewRuleName('');
+      setNewRuleAccount('');
       setNewRuleVat(0);
       toast.success(t('btnAddRule'));
     } catch (err: any) {
@@ -493,8 +498,7 @@ export default function SettingsPage() {
                         autoFocus
                       />
                       {/* Contra account input */}
-                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl flex-shrink-0">
-                        <span className="text-[10px] font-semibold text-slate-500">{chartOfAccounts}:</span>
+                      <div className="flex items-center bg-slate-50 border border-slate-200 px-1.5 py-1 rounded-xl flex-shrink-0">
                         <input
                           value={chartOfAccounts === 'SKR03' ? editRuleSKR03 : editRuleSKR04}
                           onChange={(e) => {
@@ -504,7 +508,7 @@ export default function SettingsPage() {
                           }}
                           placeholder={chartOfAccounts === 'SKR03' ? '1200' : '1800'}
                           className="w-16 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-900 text-[11px] font-mono text-center focus:outline-none focus:ring-1 focus:ring-brand-500"
-                          title={`${chartOfAccounts} Gegenkonto`}
+                          title={language === 'de' ? `Gegenkonto (${chartOfAccounts})` : `Contra Account (${chartOfAccounts})`}
                         />
                       </div>
                       {/* VAT Pills for editing rule */}
@@ -557,8 +561,8 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-medium rounded-md border border-slate-200 whitespace-nowrap" title={`${chartOfAccounts} Gegenkonto`}>
-                            {chartOfAccounts}: {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-medium rounded-md border border-slate-200 whitespace-nowrap" title={language === 'de' ? `Gegenkonto (${chartOfAccounts})` : `Contra Account (${chartOfAccounts})`}>
+                            {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
                           </span>
                           {rule.defaultVat !== undefined && (
                             <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 whitespace-nowrap">
@@ -604,12 +608,20 @@ export default function SettingsPage() {
           )}
 
           {isAdmin && (
-            <form onSubmit={handleAddRule} className="flex flex-col sm:flex-row gap-2.5 pt-4 border-t border-slate-100">
+            <form onSubmit={handleAddRule} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-4 border-t border-slate-100">
               <input
                 value={newRuleName}
                 onChange={(e) => setNewRuleName(e.target.value)}
                 placeholder={t('placeholderNewRule')}
                 className="w-full sm:flex-1 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs"
+                required
+              />
+              <input
+                value={newRuleAccount}
+                onChange={(e) => setNewRuleAccount(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder={language === 'de' ? 'Kontonummer' : 'Account number'}
+                title={language === 'de' ? `Kontonummer / Gegenkonto (${chartOfAccounts})` : `Booking account number (${chartOfAccounts})`}
+                className="w-full sm:w-32 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono text-center focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 shadow-xs flex-shrink-0"
               />
               <div className="flex items-center justify-between gap-2 w-full sm:w-auto">
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl flex-1 sm:flex-initial">

@@ -183,6 +183,8 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
       const res = await bookingRulesApi.create({
         name: trimmed,
         defaultVat: newRuleVat,
+        accountSKR03: contraAccount.trim() || undefined,
+        accountSKR04: contraAccount.trim() || undefined,
       });
       const newRule = res.data.data;
       setBookingRules((prev) => [...prev, newRule]);
