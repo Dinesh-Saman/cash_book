@@ -548,8 +548,8 @@ export default function SettingsPage() {
                       </div>
                     </form>
                   ) : (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2.5 w-full">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         {rule.ruleNumber !== undefined && (
                           <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-extrabold rounded-md border border-slate-300 tracking-wide tabular-nums select-none" title="Unique rule number (permanent)">
                             #{rule.ruleNumber}
@@ -559,24 +559,27 @@ export default function SettingsPage() {
                           {translateBookingRuleName(rule.name, language)}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between sm:justify-end gap-2 flex-shrink-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-medium rounded-md border border-slate-200 whitespace-nowrap" title={language === 'de' ? `Gegenkonto (${chartOfAccounts})` : `Contra Account (${chartOfAccounts})`}>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-medium rounded-md border border-slate-200 whitespace-nowrap" title={language === 'de' ? `Gegenkonto (${chartOfAccounts}) & MwSt.` : `Contra Account (${chartOfAccounts}) & VAT`}>
+                          <span className="font-mono font-bold text-slate-700">
                             {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
                           </span>
                           {rule.defaultVat !== undefined && (
-                            <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 whitespace-nowrap">
-                              {rule.defaultVat}% {t('thVat')}
-                            </span>
+                            <>
+                              <span className="text-slate-300 font-normal">|</span>
+                              <span className="font-bold text-brand-700">
+                                {rule.defaultVat}% {t('thVat')}
+                              </span>
+                            </>
                           )}
-                          {rule.isDefault && (
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
-                              {t('badgeDefaultRule')}
-                            </span>
-                          )}
-                        </div>
+                        </span>
+                        {rule.isDefault && (
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
+                            {t('badgeDefaultRule')}
+                          </span>
+                        )}
                         {isAdmin && !rule.isDefault && (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 ml-0.5">
                             <button
                               onClick={() => {
                                 setEditingRule(rule);
