@@ -5,7 +5,7 @@ import { BookingRule } from '../models/BookingRule';
 import { Settings } from '../models/Settings';
 import { getDefaultPermissions } from '../models/User';
 import { authenticate } from '../middleware/auth';
-import { validateExpense, recalculateBalancesFrom, getCurrentBalance } from '../services/balanceService';
+import { validateExpense, recalculateBalancesFrom, getCurrentBalance, renumberAndRecalculateBalances } from '../services/balanceService';
 import { logAction } from '../services/auditService';
 import { getDocumentStream, saveDocumentToGridFS } from '../services/documentStorage';
 import { buildMergedPdf, compressSingleDocumentBuffer, DocumentItem, MAX_TARGET_KB, DYNAMIC_TARGET_5_TO_10_KB } from '../services/documentCompression';
@@ -30,14 +30,19 @@ router.use(authenticate);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export async function getNextVoucherNumber(): Promise<string> {
-  const entries = await CashBookEntry.find({ isDeleted: false }, { voucherNo: 1 }).lean();
-  let max = 0;
-  for (let i = 0; i < entries.length; i++) {
-    const v = Number(entries[i].voucherNo);
-    if (!isNaN(v) && v > max) max = v;
+export async function getNextVoucherNumber(targetDate?: string): Promise<string> {
+  if (targetDate) {
+    const parsedDate = new Date(targetDate);
+    if (!isNaN(parsedDate.getTime())) {
+      const count = await CashBookEntry.countDocuments({
+        isDeleted: false,
+        date: { $lte: parsedDate }
+      });
+      return String(count + 1);
+    }
   }
-  return String(max + 1);
+  const count = await CashBookEntry.countDocuments({ isDeleted: false });
+  return String(count + 1);
 }
 
 export function isMonthClosed(year: number, month: number, settings?: any): boolean {
@@ -128,7 +133,7 @@ router.get('/', async (req, res, next) => {
     const entries = await CashBookEntry.find(query)
       .populate('bookingRule')
       .collation({ locale: 'en', numericOrdering: true })
-      .sort({ voucherNo: 1, date: 1, createdAt: 1 })
+      .sort({ date: 1, voucherNo: 1, createdAt: 1 })
       .skip(skip)
       .limit(Number(limit));
 
@@ -149,7 +154,8 @@ router.get('/', async (req, res, next) => {
 
 router.get('/next-voucher-no', async (req, res, next) => {
   try {
-    const nextVoucherNo = await getNextVoucherNumber();
+    const { date } = req.query;
+    const nextVoucherNo = await getNextVoucherNumber(date as string | undefined);
     res.json({ success: true, data: { nextVoucherNo } });
   } catch (error) { next(error); }
 });
@@ -258,7 +264,7 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
     let { date, voucherNo, bookingRule, bookingText, type, amount, vatPercentage, contraAccount, columnH } = req.body;
 
     const trimmedVoucher = typeof voucherNo === 'string' ? voucherNo.trim() : '';
-    const finalVoucherNo = trimmedVoucher || await getNextVoucherNumber();
+    const finalVoucherNo = trimmedVoucher || await getNextVoucherNumber(date);
 
     const userPermissions = req.user?.permissions || getDefaultPermissions(req.user?.role || 'viewer');
     if (type === 'income' && !userPermissions.canAddIncome) {
@@ -348,16 +354,17 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
       createdBy: req.user._id
     });
 
-    await recalculateBalancesFrom(entryDate);
+    await renumberAndRecalculateBalances();
+    const updatedEntry = await CashBookEntry.findById(entry._id).populate('bookingRule');
     logAction({
       action: 'CREATE',
       entityType: 'entry',
       entityId: entry._id.toString(),
-      description: `Created ${type} entry ${finalVoucherNo} (€ ${numAmount.toFixed(2)}) with ${allSavedDocs.length} document(s)`,
+      description: `Created ${type} entry ${updatedEntry?.voucherNo || finalVoucherNo} (€ ${numAmount.toFixed(2)}) with ${allSavedDocs.length} document(s)`,
       performedBy: req.user._id
     }).catch(err => console.error('logAction CREATE error:', err));
 
-    res.json({ success: true, data: entry });
+    res.json({ success: true, data: updatedEntry || entry });
   } catch (error) { next(error); }
 });
 
@@ -480,16 +487,17 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
     });
 
     await entry.save();
-    await recalculateBalancesFrom(newDate < oldDate ? newDate : oldDate);
+    await renumberAndRecalculateBalances();
+    const updatedEntry = await CashBookEntry.findById(entry._id).populate('bookingRule');
     logAction({
       action: 'UPDATE',
       entityType: 'entry',
       entityId: entry._id.toString(),
-      description: `Updated entry ${voucherNo || ''} (€ ${Number(amount).toFixed(2)}), ${allDocs.length} document(s)`,
+      description: `Updated entry ${updatedEntry?.voucherNo || voucherNo || ''} (€ ${Number(amount).toFixed(2)}), ${allDocs.length} document(s)`,
       performedBy: req.user._id
     }).catch(err => console.error('logAction UPDATE error:', err));
 
-    res.json({ success: true, data: entry });
+    res.json({ success: true, data: updatedEntry || entry });
   } catch (error) { next(error); }
 });
 
@@ -521,7 +529,7 @@ router.delete('/:id', async (req: any, res, next) => {
     entry.updatedBy = req.user._id;
     await entry.save();
 
-    await recalculateBalancesFrom(entry.date);
+    await renumberAndRecalculateBalances();
     logAction({
       action: 'DELETE',
       entityType: 'entry',
