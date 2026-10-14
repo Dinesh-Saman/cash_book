@@ -317,6 +317,17 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
     const savedDocs = await Promise.all(files.map(saveFile));
     const allSavedDocs = [...preUploadedDocs, ...savedDocs].slice(0, 10);
 
+    // Resolve VAT: take supplied vatPercentage if valid, otherwise lookup bookingRule's defaultVat
+    let finalVatPercentage: 0 | 7 | 19 = 0;
+    if (vatPercentage !== undefined && [0, 7, 19].includes(Number(vatPercentage))) {
+      finalVatPercentage = Number(vatPercentage) as 0 | 7 | 19;
+    } else if (bookingRule) {
+      const ruleDoc = await BookingRule.findById(bookingRule);
+      if (ruleDoc && ruleDoc.defaultVat !== undefined && [0, 7, 19].includes(ruleDoc.defaultVat)) {
+        finalVatPercentage = ruleDoc.defaultVat;
+      }
+    }
+
     const entry = await CashBookEntry.create({
       date: entryDate,
       voucherNo: finalVoucherNo,
@@ -324,7 +335,7 @@ router.post('/', upload.array('documents', 50), async (req: any, res, next) => {
       bookingText: bookingText || '',
       type,
       amount: numAmount,
-      vatPercentage: Number(vatPercentage) || 0,
+      vatPercentage: finalVatPercentage,
       cashBalance: 0,
       contraAccount: resolvedAccount,
       columnH: resolvedAccount,
@@ -438,6 +449,17 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
       resolvedAccount = String(contraAccount || columnH || '').trim();
     }
 
+    // Resolve VAT: take supplied vatPercentage if valid, otherwise lookup bookingRule's defaultVat or retain entry.vatPercentage
+    let finalVatPercentage: 0 | 7 | 19 = entry.vatPercentage ?? 0;
+    if (vatPercentage !== undefined && [0, 7, 19].includes(Number(vatPercentage))) {
+      finalVatPercentage = Number(vatPercentage) as 0 | 7 | 19;
+    } else if (bookingRule) {
+      const ruleDoc = await BookingRule.findById(bookingRule);
+      if (ruleDoc && ruleDoc.defaultVat !== undefined && [0, 7, 19].includes(ruleDoc.defaultVat)) {
+        finalVatPercentage = ruleDoc.defaultVat;
+      }
+    }
+
     Object.assign(entry, {
       date: newDate,
       voucherNo: voucherNo || '',
@@ -445,7 +467,7 @@ router.put('/:id', upload.array('documents', 50), async (req: any, res, next) =>
       bookingText: bookingText || '',
       type,
       amount: Number(amount),
-      vatPercentage: Number(vatPercentage) || 0,
+      vatPercentage: finalVatPercentage,
       contraAccount: resolvedAccount,
       columnH: resolvedAccount,
       year: newYear,

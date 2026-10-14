@@ -18,15 +18,16 @@ interface Props {
   onSuccess: () => void;
 }
 
-const VAT_OPTS = [0, 7, 19];
+const VAT_OPTS = [0, 7, 19] as const;
 
-function getAutoVat(rule: BookingRule | string | undefined): 0 | 7 | 19 {
+function getAutoVat(rule: Partial<BookingRule> | { name?: string; defaultVat?: number } | string | undefined): 0 | 7 | 19 {
   if (!rule) return 0;
   if (typeof rule === 'object') {
     if (rule.defaultVat !== undefined && [0, 7, 19].includes(rule.defaultVat)) {
-      return rule.defaultVat;
+      return rule.defaultVat as 0 | 7 | 19;
     }
-    return getAutoVat(rule.name);
+    if (rule.name) return getAutoVat(rule.name);
+    return 0;
   }
   if (rule.includes('19%')) return 19;
   if (rule.includes('7%')) return 7;
@@ -52,7 +53,13 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
   );
   const [bookingText, setBookingText] = useState(isEdit ? entry!.bookingText : '');
   const [amount, setAmount] = useState(isEdit ? formatAmountWithCommas(String(entry!.amount)) : '');
-  const [vat, setVat] = useState<0 | 7 | 19>(isEdit ? entry!.vatPercentage : 0);
+  const [vat, setVat] = useState<0 | 7 | 19>(() => {
+    if (isEdit && entry) {
+      if ([0, 7, 19].includes(entry.vatPercentage)) return entry.vatPercentage;
+      if (typeof entry.bookingRule === 'object') return getAutoVat(entry.bookingRule);
+    }
+    return 0;
+  });
   /** New files selected in this session */
   const [newFiles, setNewFiles] = useState<File[]>([]);
   /** Paths of existing docs the user wants to remove (edit mode) */
@@ -505,7 +512,7 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-slate-600">{t('thVat')}:</span>
                       <div className="flex gap-1">
-                        {([0, 7, 19] as const).map((v) => (
+                        {VAT_OPTS.map((v) => (
                           <button
                             key={v}
                             type="button"
@@ -535,11 +542,17 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
                   required
                 >
                   <option value="">{t('selectBookingRulePlaceholder')}</option>
-                  {bookingRules.map((r) => (
-                    <option key={r._id} value={r._id}>
-                      {r.ruleNumber !== undefined ? `${r.ruleNumber}. ` : ''}{translateBookingRuleName(r.name, language)}
-                    </option>
-                  ))}
+                  {bookingRules.map((r) => {
+                    const translated = translateBookingRuleName(r.name, language);
+                    const autoVat = getAutoVat(r);
+                    const hasPercent = r.name.includes('%') || translated.includes('%');
+                    const vatDisplay = !hasPercent ? ` (${autoVat}% MwSt.)` : '';
+                    return (
+                      <option key={r._id} value={r._id}>
+                        {r.ruleNumber !== undefined ? `${r.ruleNumber}. ` : ''}{translated}{vatDisplay}
+                      </option>
+                    );
+                  })}
                   <option value="__add_new__" className="text-brand-600 font-semibold">
                     {t('addNewBookingRuleOption')}
                   </option>
@@ -576,57 +589,42 @@ export default function EntryForm({ type, entry, onClose, onSuccess }: Props) {
             />
           </div>
 
-          {/* Row 4: Amount & VAT (Equal 2-Column Grid) */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Amount */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+          {/* Row 4: Amount (VAT automatically applied from booking rule) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
                 {isIncome ? t('lblIncomeAmount') : t('lblExpenseAmount')}{' '}
                 <span className="text-rose-500">*</span>
               </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
-                  €
+              {bookingRuleId ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
+                  {vat}% {t('thVat')} ({language === 'de' ? 'aus Buchungsregel' : 'from rule'})
                 </span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={handleAmountChange}
-                  placeholder="0.00"
-                  className={cn(
-                    'w-full pl-8 pr-3.5 py-2 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 placeholder-slate-400 shadow-xs font-semibold',
-                    balanceWarning
-                      ? 'border-rose-500 text-rose-700 focus:ring-rose-500/20 focus:border-rose-600'
-                      : 'border-slate-200 text-slate-900 focus:ring-brand-500/20 focus:border-brand-600'
-                  )}
-                  required
-                />
-              </div>
+              ) : (
+                <span className="text-[11px] text-slate-400 font-normal">
+                  {language === 'de' ? 'MwSt. wird aus Buchungsregel ermittelt' : 'VAT auto-set by booking rule'}
+                </span>
+              )}
             </div>
-
-            {/* VAT */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t('lblVat')} <span className="text-rose-500">*</span>
-              </label>
-              <div className="flex gap-2">
-                {VAT_OPTS.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setVat(v as 0 | 7 | 19)}
-                    className={cn(
-                      'flex-1 py-2 rounded-xl text-xs font-bold border transition-all duration-150 shadow-xs',
-                      vat === v
-                        ? 'bg-brand-600 border-brand-600 text-white shadow-brand'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-brand-400 hover:text-brand-600'
-                    )}
-                  >
-                    {v}%
-                  </button>
-                ))}
-              </div>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                €
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={handleAmountChange}
+                placeholder="0.00"
+                className={cn(
+                  'w-full pl-8 pr-3.5 py-2 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 placeholder-slate-400 shadow-xs font-semibold',
+                  balanceWarning
+                    ? 'border-rose-500 text-rose-700 focus:ring-rose-500/20 focus:border-rose-600'
+                    : 'border-slate-200 text-slate-900 focus:ring-brand-500/20 focus:border-brand-600'
+                )}
+                required
+              />
             </div>
           </div>
 

@@ -65,6 +65,7 @@ export interface CashBookEntry {
     accountSKR03?: string;
     accountSKR04?: string;
     ruleNumber?: number;
+    defaultVat?: 0 | 7 | 19;
   };
   bookingText: string;
   type: 'income' | 'expense';
