@@ -559,49 +559,51 @@ export default function SettingsPage() {
                           {translateBookingRuleName(rule.name, language)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-medium rounded-md border border-slate-200 whitespace-nowrap" title={language === 'de' ? `Gegenkonto (${chartOfAccounts}) & MwSt.` : `Contra Account (${chartOfAccounts}) & VAT`}>
-                          <span className="font-mono font-bold text-slate-700">
-                            {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
-                          </span>
-                          {rule.defaultVat !== undefined && (
-                            <>
-                              <span className="text-slate-300 font-normal">|</span>
-                              <span className="font-bold text-brand-700">
-                                {rule.defaultVat}% {t('thVat')}
-                              </span>
-                            </>
-                          )}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* 1. Account number (separate fixed-width column) */}
+                        <span
+                          className="w-14 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-medium rounded-md border border-slate-200 text-center inline-block tabular-nums whitespace-nowrap select-none"
+                          title={language === 'de' ? `Gegenkonto (${chartOfAccounts})` : `Contra Account (${chartOfAccounts})`}
+                        >
+                          {chartOfAccounts === 'SKR03' ? (rule.accountSKR03 || '1360') : (rule.accountSKR04 || '1360')}
                         </span>
-                        {rule.isDefault && (
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap">
-                            {t('badgeDefaultRule')}
-                          </span>
-                        )}
-                        {isAdmin && !rule.isDefault && (
-                          <div className="flex items-center gap-1 ml-0.5">
-                            <button
-                              onClick={() => {
-                                setEditingRule(rule);
-                                setEditRuleName(rule.name);
-                                setEditRuleVat(rule.defaultVat ?? 0);
-                                setEditRuleSKR03(rule.accountSKR03 || '');
-                                setEditRuleSKR04(rule.accountSKR04 || '');
-                              }}
-                              className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                              title={t('btnEdit')}
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteRule(rule)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title={t('btnDelete')}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        )}
+
+                        {/* 2. VAT (separate fixed-width column) */}
+                        <span className="w-[68px] py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md border border-brand-200 text-center inline-block tabular-nums whitespace-nowrap select-none">
+                          {rule.defaultVat !== undefined ? `${rule.defaultVat}% ${t('thVat')}` : `0% ${t('thVat')}`}
+                        </span>
+
+                        {/* 3. Default badge or Edit/Delete actions (fixed-width column) */}
+                        <div className="w-16 flex items-center justify-end">
+                          {rule.isDefault ? (
+                            <span className="w-full text-center py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200 whitespace-nowrap select-none">
+                              {t('badgeDefaultRule')}
+                            </span>
+                          ) : isAdmin ? (
+                            <div className="flex items-center gap-1 justify-end">
+                              <button
+                                onClick={() => {
+                                  setEditingRule(rule);
+                                  setEditRuleName(rule.name);
+                                  setEditRuleVat(rule.defaultVat ?? 0);
+                                  setEditRuleSKR03(rule.accountSKR03 || '');
+                                  setEditRuleSKR04(rule.accountSKR04 || '');
+                                }}
+                                className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                                title={t('btnEdit')}
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteRule(rule)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title={t('btnDelete')}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   )}
