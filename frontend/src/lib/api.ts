@@ -228,4 +228,18 @@ export const auditApi = {
     api.get<{ success: boolean; data: { logs: AuditLog[]; total: number } }>('/audit', { params }),
 };
 
+// ─── Bank Statements ────────────────────────────────────────────────────────
+export const bankApi = {
+  getLatest: () =>
+    api.get<{ success: boolean; data: any }>('/bank/latest'),
+  getHistory: () =>
+    api.get<{ success: boolean; data: any[] }>('/bank/history'),
+  getById: (id: string) =>
+    api.get<{ success: boolean; data: any }>(`/bank/${id}`),
+  save: (data: { metadata: any; transactions: any[] }) =>
+    api.post<{ success: boolean; data: any }>('/bank/save', data),
+  delete: (id: string) =>
+    api.delete<{ success: boolean }>(`/bank/${id}`),
+};
+
 export default api;

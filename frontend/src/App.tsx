@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage';
 import CashBookPage from './pages/CashBookPage';
 import MonthlyReportPage from './pages/MonthlyReportPage';
 import AnnualReportPage from './pages/AnnualReportPage';
+import BankPage from './pages/BankPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
@@ -78,6 +79,7 @@ export default function App() {
           <Route index element={<CashBookPage />} />
           <Route path="monthly" element={<MonthlyReportPage />} />
           <Route path="annual" element={<AnnualReportPage />} />
+          <Route path="bank" element={<BankPage />} />
           <Route path="settings" element={<SettingsPage />} />
 
           <Route

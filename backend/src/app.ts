@@ -13,6 +13,7 @@ import exportsRoutes from './routes/exports';
 import usersRoutes from './routes/users';
 import auditRoutes from './routes/audit';
 import documentsRoutes from './routes/documents';
+import bankRoutes from './routes/bank';
 
 import { connectDB } from './db';
 
@@ -59,6 +60,7 @@ app.use('/api/exports', exportsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/documents', documentsRoutes);
+app.use('/api/bank', bankRoutes);
 app.use('/uploads', documentsRoutes);
 
 // Serve frontend build in production

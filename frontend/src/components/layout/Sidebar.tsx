@@ -13,6 +13,7 @@ import {
   MinusCircle,
   Wallet,
   CheckCircle2,
+  Landmark,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -54,6 +55,7 @@ export default function Sidebar() {
     { to: '/', icon: Home, label: t('navCashBook') },
     { to: '/monthly', icon: Calendar, label: t('navMonthlyReports') },
     { to: '/annual', icon: BarChart2, label: t('navAnnualReport') },
+    { to: '/bank', icon: Landmark, label: t('navBank') },
     { to: '/settings', icon: Settings, label: t('navSettings') },
   ];
 
