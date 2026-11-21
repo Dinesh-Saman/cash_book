@@ -30,6 +30,7 @@ import toast from 'react-hot-toast';
 import { parseBankCsv, BankParsedData } from '../lib/bankParser';
 import { useTranslation } from '../store/languageStore';
 import CustomSelect, { SelectOption } from '../components/ui/CustomSelect';
+import DatePickerInput from '../components/ui/DatePickerInput';
 import { bankApi } from '../lib/api';
 import { uploadDocumentWithProgress, UploadedDocumentRef } from '../lib/documentUpload';
 import DocumentViewer from '../components/cashbook/DocumentViewer';
@@ -989,11 +990,11 @@ export default function BankPage() {
                   <Calendar size={13} className="text-slate-400" />
                   <span>{language === 'de' ? 'Von Datum (From Date)' : 'From Date'}</span>
                 </label>
-                <input
-                  type="date"
+                <DatePickerInput
                   value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all text-slate-800"
+                  onChange={(val) => setFromDate(val)}
+                  placeholder={language === 'de' ? 'TT.MM.JJJJ' : 'DD.MM.YYYY'}
+                  max={toDate || undefined}
                 />
               </div>
 
@@ -1003,11 +1004,11 @@ export default function BankPage() {
                   <Calendar size={13} className="text-slate-400" />
                   <span>{language === 'de' ? 'Bis Datum (To Date)' : 'To Date'}</span>
                 </label>
-                <input
-                  type="date"
+                <DatePickerInput
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all text-slate-800"
+                  onChange={(val) => setToDate(val)}
+                  placeholder={language === 'de' ? 'TT.MM.JJJJ' : 'DD.MM.YYYY'}
+                  min={fromDate || undefined}
                 />
               </div>
 
