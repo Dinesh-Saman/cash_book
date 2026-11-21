@@ -237,78 +237,157 @@ export default function BankPage() {
     }
   };
 
-  const handleFileProcess = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
+  const readFileWithEncoding = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    try {
+      const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+      return utf8Decoder.decode(buffer);
+    } catch {
+      const latinDecoder = new TextDecoder('iso-8859-1');
+      return latinDecoder.decode(buffer);
+    }
+  };
+
+  const handleFilesProcess = async (fileList: FileList | File[]) => {
+    const rawFiles = Array.from(fileList);
+    const csvFiles = rawFiles.filter(
+      (f) => f.name.toLowerCase().endsWith('.csv') || f.type === 'text/csv'
+    );
+
+    if (csvFiles.length === 0) {
       toast.error(
         language === 'de'
-          ? 'Bitte laden Sie eine gültige CSV-Datei hoch.'
-          : 'Please upload a valid CSV file.'
+          ? 'Bitte laden Sie eine oder mehrere gültige CSV-Dateien hoch.'
+          : 'Please upload valid CSV file(s).'
       );
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const text = e.target?.result as string;
+    let filesToProcess = csvFiles;
+    if (csvFiles.length > 5) {
+      toast(
+        language === 'de'
+          ? 'Maximal 5 CSV-Dateien können gleichzeitig hochgeladen werden. Die ersten 5 Dateien werden verarbeitet.'
+          : 'Maximum 5 CSV files allowed at once. Processing first 5 files.',
+        { icon: '⚠️' }
+      );
+      filesToProcess = csvFiles.slice(0, 5);
+    }
+
+    const toastId = toast.loading(
+      language === 'de'
+        ? `Lese ${filesToProcess.length} Bank-CSV-Datei(en) ein...`
+        : `Reading ${filesToProcess.length} bank CSV file(s)...`
+    );
+
+    try {
+      const parsedResults: BankParsedData[] = [];
+      for (const file of filesToProcess) {
+        const text = await readFileWithEncoding(file);
         const parsed = parseBankCsv(text, file.name, file.size);
-        setBankData(parsed);
-
-        // Save immediately in local storage for instantaneous recovery
-        try {
-          localStorage.setItem('last_bank_statement_data', JSON.stringify(parsed));
-        } catch {}
-
-        // Reset filters
-        setFromDate('');
-        setToDate('');
-        setSelectedCompany('ALL');
-        setAccountSearchText('');
-        setSearchQuery('');
-        setShowUploadModal(false);
-
-        // Persist to database so it stays permanently in history & on login/logout
-        setIsSaving(true);
-        try {
-          const saveRes = await bankApi.save(parsed);
-          if (saveRes.data?.data?.id) {
-            setCurrentStatementId(saveRes.data.data.id);
-          }
-          toast.success(
-            language === 'de'
-              ? `CSV erfolgreich eingelesen & gespeichert! ${parsed.transactions.length} Buchungen geladen.`
-              : `CSV parsed & saved to history! ${parsed.transactions.length} transactions loaded.`
-          );
-        } catch {
-          toast.success(
-            language === 'de'
-              ? `CSV eingelesen! ${parsed.transactions.length} Buchungen verfügbar.`
-              : `CSV parsed! ${parsed.transactions.length} transactions loaded.`
-          );
-        } finally {
-          setIsSaving(false);
-        }
-      } catch (err: any) {
-        toast.error(err.message || 'Fehler beim Parsen der Bank-CSV-Datei.');
+        parsedResults.push(parsed);
       }
-    };
-    reader.onerror = () => {
-      toast.error(language === 'de' ? 'Fehler beim Lesen der Datei.' : 'Error reading file.');
-    };
-    reader.readAsText(file, 'UTF-8');
+
+      // Merge statements into single consolidated dataset
+      const allTransactions: BankTransaction[] = [];
+      const accountNames = new Set<string>();
+      const ownAccountNumbers = new Set<string>();
+      const ownIbans = new Set<string>();
+      let totalSize = 0;
+
+      parsedResults.forEach((res, fileIdx) => {
+        totalSize += res.metadata.fileSize || 0;
+        if (res.metadata.accountName) accountNames.add(res.metadata.accountName);
+        if (res.metadata.ownAccountNumber) ownAccountNumbers.add(res.metadata.ownAccountNumber);
+        if (res.metadata.ownIban) ownIbans.add(res.metadata.ownIban);
+
+        res.transactions.forEach((tx, txIdx) => {
+          allTransactions.push({
+            ...tx,
+            id: tx.id || `tx-${fileIdx}-${txIdx}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          });
+        });
+      });
+
+      // Sort merged transactions chronologically descending
+      allTransactions.sort((a, b) => b.bookingDate.localeCompare(a.bookingDate));
+
+      const earliestDate = allTransactions.length > 0 ? allTransactions[allTransactions.length - 1].bookingDate : '';
+      const latestDate = allTransactions.length > 0 ? allTransactions[0].bookingDate : '';
+
+      const mergedData: BankParsedData = {
+        metadata: {
+          fileName:
+            filesToProcess.length === 1
+              ? filesToProcess[0].name
+              : `${filesToProcess.length} Dateien (${filesToProcess.map((f) => f.name).join(', ')})`,
+          fileSize: totalSize,
+          uploadedAt: new Date().toISOString(),
+          accountName: Array.from(accountNames).join(' / ') || undefined,
+          ownAccountNumber: Array.from(ownAccountNumbers).join(', ') || undefined,
+          ownIban: Array.from(ownIbans).join(', ') || undefined,
+          periodText:
+            earliestDate && latestDate
+              ? `${formatDate(earliestDate)} - ${formatDate(latestDate)}`
+              : undefined,
+          totalRecords: allTransactions.length,
+          currency: 'EUR',
+        },
+        transactions: allTransactions,
+      };
+
+      setBankData(mergedData);
+
+      try {
+        localStorage.setItem('last_bank_statement_data', JSON.stringify(mergedData));
+      } catch {}
+
+      setSelectedBankAccount('ALL');
+      setFromDate('');
+      setToDate('');
+      setSelectedCompany('ALL');
+      setAccountSearchText('');
+      setSearchQuery('');
+      setShowUploadModal(false);
+
+      setIsSaving(true);
+      try {
+        const saveRes = await bankApi.save(mergedData);
+        if (saveRes.data?.data?.id) {
+          setCurrentStatementId(saveRes.data.data.id);
+        }
+      } catch (err) {
+        console.error('Failed to save statement to backend history:', err);
+      } finally {
+        setIsSaving(false);
+      }
+
+      toast.success(
+        language === 'de'
+          ? `${filesToProcess.length} CSV-Datei(en) erfolgreich eingelesen! ${allTransactions.length} Buchungen geladen.`
+          : `${filesToProcess.length} CSV file(s) parsed & saved! ${allTransactions.length} transactions loaded.`,
+        { id: toastId }
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Fehler beim Parsen der Bank-CSV-Dateien.', { id: toastId });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileProcess(e.dataTransfer.files[0]);
+      handleFilesProcess(e.dataTransfer.files);
     }
   };
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleFileProcess(e.target.files[0]);
+      handleFilesProcess(e.target.files);
     }
   };
 
@@ -471,11 +550,23 @@ export default function BankPage() {
     return allAccounts.filter((acc) => acc.toLowerCase().includes(q));
   }, [allAccounts, accountSearchText]);
 
-  // Filtered transactions based on date, company, account search, and general search
+  // Filtered transactions based on bank account, date, company, account search, and general search
   const filteredTransactions = useMemo(() => {
     if (!bankData) return [];
 
     return bankData.transactions.filter((tx) => {
+      // Filter by selected bank account (350_1292218_00, 350_1292218_01, or ALL)
+      if (selectedBankAccount !== 'ALL') {
+        const txAccount =
+          tx.ownAccountNumber ||
+          normalizeBankAccountId(
+            bankData.metadata?.ownAccountNumber,
+            tx.sourceFileName || bankData.metadata?.fileName,
+            bankData.metadata?.ownIban
+          );
+        if (txAccount !== selectedBankAccount) return false;
+      }
+
       if (fromDate && tx.bookingDate < fromDate) return false;
       if (toDate && tx.bookingDate > toDate) return false;
       if (selectedCompany !== 'ALL' && tx.company !== selectedCompany) return false;
@@ -490,11 +581,12 @@ export default function BankPage() {
         const inPurpose = tx.purpose?.toLowerCase().includes(q);
         const inType = tx.transactionType?.toLowerCase().includes(q);
         const inInvs = tx.extractedInvoices?.some((inv) => inv.toLowerCase().includes(q));
-        if (!inComp && !inAcc && !inPurpose && !inType && !inInvs) return false;
+        const inOwnAcc = tx.ownAccountNumber?.toLowerCase().includes(q);
+        if (!inComp && !inAcc && !inPurpose && !inType && !inInvs && !inOwnAcc) return false;
       }
       return true;
     });
-  }, [bankData, fromDate, toDate, selectedCompany, accountSearchText, searchQuery]);
+  }, [bankData, selectedBankAccount, fromDate, toDate, selectedCompany, accountSearchText, searchQuery]);
 
   // Grouped by Company Summary with Dates
   const companySummary = useMemo(() => {
@@ -616,6 +708,7 @@ export default function BankPage() {
   };
 
   const handleResetFilters = () => {
+    setSelectedBankAccount('ALL');
     setFromDate('');
     setToDate('');
     setSelectedCompany('ALL');
@@ -633,6 +726,7 @@ export default function BankPage() {
 
     const headers = [
       'Buchungstag',
+      'Bankkonto',
       'Unternehmen (Begünstigter / Auftraggeber)',
       'Kontonummer / IBAN',
       'Umsatzart',
@@ -642,6 +736,7 @@ export default function BankPage() {
     ];
     const rows = sortedTransactions.map((tx) => [
       escapeCsvCell(tx.rawDate || tx.bookingDate || ''),
+      escapeCsvCell(tx.ownAccountNumber || ''),
       escapeCsvCell(tx.company || ''),
       escapeCsvCell(tx.accountNumber || ''),
       escapeCsvCell(tx.transactionType || ''),
@@ -771,12 +866,13 @@ export default function BankPage() {
         </div>
       </div>
 
-      {/* Hidden File Input for Statement CSV */}
+      {/* Hidden File Input for Statement CSV (supports up to 5 CSVs) */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={onFileSelect}
         accept=".csv,text/csv"
+        multiple
         className="hidden"
       />
 
@@ -820,17 +916,17 @@ export default function BankPage() {
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-slate-800">
-                {language === 'de' ? 'Bank-CSV-Datei hier ablegen' : 'Drop your Bank CSV file here'}
+                {language === 'de' ? 'Bank-CSV-Dateien hier ablegen (bis zu 5 Dateien)' : 'Drop your Bank CSV files here (up to 5 files)'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
                 {language === 'de'
-                  ? 'Klicken oder Datei per Drag & Drop hineinziehen. Das Ergebnis wird automatisch gespeichert und bleibt auch nach dem Abmelden erhalten!'
-                  : 'Click to browse or drop CSV. Summary is permanently saved and preserved across login/logout!'}
+                  ? 'Klicken oder bis zu 5 CSV-Dateien per Drag & Drop hineinziehen (z.B. für Konto 350_1292218_00 und 350_1292218_01). Werden automatisch zusammengeführt!'
+                  : 'Click to browse or drop up to 5 CSV files (e.g. for accounts 350_1292218_00 & 350_1292218_01). Automatically merged!'}
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 bg-slate-100/80 px-3 py-1.5 rounded-lg border border-slate-200/60">
               <FileSpreadsheet size={14} />
-              <span>Unterstützt standardisierte Bankumsatz-CSVs (.csv)</span>
+              <span>{language === 'de' ? 'Unterstützt bis zu 5 Bankumsatz-CSVs (.csv)' : 'Supports up to 5 bank statement CSVs (.csv)'}</span>
             </div>
           </div>
         </div>

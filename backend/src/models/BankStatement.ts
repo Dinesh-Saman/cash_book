@@ -27,6 +27,8 @@ export interface IBankTransaction {
   amount: number;
   currency: string;
   extractedInvoices?: string[];
+  ownAccountNumber?: string;
+  sourceFileName?: string;
 }
 
 export interface IBankStatementMetadata {
@@ -74,6 +76,8 @@ const bankTransactionSchema = new Schema<IBankTransaction>(
     amount: { type: Number, required: true },
     currency: { type: String, default: 'EUR' },
     extractedInvoices: [{ type: String }],
+    ownAccountNumber: { type: String },
+    sourceFileName: { type: String },
   },
   { _id: false }
 );
