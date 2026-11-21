@@ -20,6 +20,7 @@ router.get('/latest', async (req, res, next) => {
         id: latest._id,
         metadata: latest.metadata,
         transactions: latest.transactions,
+        companyInvoices: latest.companyInvoices || [],
         createdAt: latest.createdAt,
       },
     });
@@ -66,6 +67,7 @@ router.get('/:id', async (req, res, next) => {
         id: statement._id,
         metadata: statement.metadata,
         transactions: statement.transactions,
+        companyInvoices: statement.companyInvoices || [],
         createdAt: statement.createdAt,
       },
     });
@@ -78,7 +80,7 @@ router.get('/:id', async (req, res, next) => {
 // Saves an uploaded bank statement to MongoDB so it persists permanently
 router.post('/save', async (req: any, res, next) => {
   try {
-    const { metadata, transactions } = req.body;
+    const { metadata, transactions, companyInvoices } = req.body;
     if (!metadata || !Array.isArray(transactions)) {
       return res.status(400).json({ success: false, message: 'Invalid bank statement payload' });
     }
@@ -95,6 +97,7 @@ router.post('/save', async (req: any, res, next) => {
       totalRecords: transactions.length,
       metadata,
       transactions,
+      companyInvoices: Array.isArray(companyInvoices) ? companyInvoices : [],
       uploadedBy: req.user?._id,
     });
 
@@ -112,7 +115,65 @@ router.post('/save', async (req: any, res, next) => {
         id: statement._id,
         metadata: statement.metadata,
         transactions: statement.transactions,
+        companyInvoices: statement.companyInvoices || [],
         createdAt: statement.createdAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── POST /api/bank/company-invoices ──────────────────────────────────────────
+// Upload / attach invoices for a specific company in the bank statement
+router.post('/company-invoices', async (req: any, res, next) => {
+  try {
+    const { statementId, company, invoices } = req.body;
+    if (!company || !Array.isArray(invoices)) {
+      return res.status(400).json({ success: false, message: 'Invalid company or invoices data' });
+    }
+
+    let statement;
+    if (statementId) {
+      statement = await BankStatement.findById(statementId);
+    }
+    if (!statement) {
+      statement = await BankStatement.findOne().sort({ createdAt: -1 });
+    }
+    if (!statement) {
+      return res.status(404).json({ success: false, message: 'No bank statement found' });
+    }
+
+    const existingCompanyList = statement.companyInvoices || [];
+    const compIdx = existingCompanyList.findIndex(
+      (c) => c.company.trim().toLowerCase() === company.trim().toLowerCase()
+    );
+
+    if (compIdx !== -1) {
+      existingCompanyList[compIdx].invoices = invoices;
+    } else {
+      existingCompanyList.push({
+        company: company.trim(),
+        invoices,
+      });
+    }
+
+    statement.companyInvoices = existingCompanyList;
+    await statement.save();
+
+    await logAction({
+      action: 'UPDATE',
+      entityType: 'bank_statement' as any,
+      entityId: statement._id.toString(),
+      description: `Updated invoices for company "${company}" (${invoices.length} file(s)) in statement "${statement.fileName}"`,
+      performedBy: req.user?._id,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        company,
+        companyInvoices: statement.companyInvoices,
       },
     });
   } catch (error) {

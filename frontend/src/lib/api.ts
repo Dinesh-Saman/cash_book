@@ -236,8 +236,10 @@ export const bankApi = {
     api.get<{ success: boolean; data: any[] }>('/bank/history'),
   getById: (id: string) =>
     api.get<{ success: boolean; data: any }>(`/bank/${id}`),
-  save: (data: { metadata: any; transactions: any[] }) =>
+  save: (data: { metadata: any; transactions: any[]; companyInvoices?: any[] }) =>
     api.post<{ success: boolean; data: any }>('/bank/save', data),
+  saveCompanyInvoices: (data: { statementId?: string; company: string; invoices: any[] }) =>
+    api.post<{ success: boolean; data: any }>('/bank/company-invoices', data),
   delete: (id: string) =>
     api.delete<{ success: boolean }>(`/bank/${id}`),
 };

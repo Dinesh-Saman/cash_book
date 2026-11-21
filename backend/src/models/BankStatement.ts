@@ -1,6 +1,19 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { IUser } from './User';
 
+export interface IBankInvoiceDocument {
+  path: string;
+  originalName: string;
+  mimeType: string;
+  size?: number;
+  uploadedAt?: string;
+}
+
+export interface IBankCompanyInvoice {
+  company: string;
+  invoices: IBankInvoiceDocument[];
+}
+
 export interface IBankTransaction {
   id: string;
   bookingDate: string; // ISO format: YYYY-MM-DD
@@ -41,6 +54,7 @@ export interface IBankStatement extends Document {
   totalRecords: number;
   metadata: IBankStatementMetadata;
   transactions: IBankTransaction[];
+  companyInvoices?: IBankCompanyInvoice[];
   uploadedBy?: IUser['_id'];
   createdAt: Date;
   updatedAt: Date;
@@ -77,6 +91,20 @@ const bankStatementSchema = new Schema<IBankStatement>(
     totalRecords: { type: Number, default: 0 },
     metadata: { type: Schema.Types.Mixed, required: true },
     transactions: [bankTransactionSchema],
+    companyInvoices: [
+      {
+        company: { type: String, required: true },
+        invoices: [
+          {
+            path: { type: String, required: true },
+            originalName: { type: String, required: true },
+            mimeType: { type: String, required: true },
+            size: { type: Number },
+            uploadedAt: { type: String },
+          },
+        ],
+      },
+    ],
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

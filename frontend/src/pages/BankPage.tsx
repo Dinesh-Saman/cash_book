@@ -22,12 +22,31 @@ import {
   ArrowRight,
   AlertTriangle,
   Info,
+  FileText,
+  Eye,
+  Loader2,
+  Plus,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseBankCsv, BankParsedData } from '../lib/bankParser';
 import { useTranslation } from '../store/languageStore';
 import CustomSelect, { SelectOption } from '../components/ui/CustomSelect';
 import { bankApi } from '../lib/api';
+import { uploadDocumentWithProgress, UploadedDocumentRef } from '../lib/documentUpload';
+import DocumentViewer from '../components/cashbook/DocumentViewer';
+
+export interface CompanyInvoiceItem {
+  path: string;
+  originalName: string;
+  mimeType: string;
+  size?: number;
+  uploadedAt?: string;
+}
+
+export interface CompanyInvoiceRecord {
+  company: string;
+  invoices: CompanyInvoiceItem[];
+}
 
 interface HistoryItem {
   _id: string;
@@ -77,6 +96,16 @@ export default function BankPage() {
   const [companySortField, setCompanySortField] = useState<'company' | 'count' | 'totalAmount' | 'dates'>('totalAmount');
   const [companySortDirection, setCompanySortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Company Invoices mapping: company -> array of uploaded invoice docs
+  const [companyInvoicesMap, setCompanyInvoicesMap] = useState<Record<string, CompanyInvoiceItem[]>>({});
+  const [uploadingCompany, setUploadingCompany] = useState<string | null>(null);
+  const companyFileInputRef = useRef<HTMLInputElement>(null);
+  const activeCompanyForUploadRef = useRef<string>('');
+
+  // Invoice viewing modal
+  const [viewingCompanyInvoices, setViewingCompanyInvoices] = useState<{ company: string; invoices: CompanyInvoiceItem[] } | null>(null);
+  const [viewingDocEntry, setViewingDocEntry] = useState<any | null>(null);
+
   // Fetch the latest uploaded statement and cashbook entries on initial load
   useEffect(() => {
     // 1. Load latest uploaded bank statement
@@ -91,12 +120,25 @@ export default function BankPage() {
             transactions: item.transactions,
           });
           setCurrentStatementId(item.id);
+          if (Array.isArray(item.companyInvoices)) {
+            const map: Record<string, CompanyInvoiceItem[]> = {};
+            item.companyInvoices.forEach((ci: CompanyInvoiceRecord) => {
+              if (ci.company && Array.isArray(ci.invoices)) {
+                map[ci.company.trim()] = ci.invoices;
+              }
+            });
+            setCompanyInvoicesMap(map);
+          }
         } else {
           // Fallback to local storage if offline
           try {
             const cached = localStorage.getItem('last_bank_statement_data');
             if (cached) {
               setBankData(JSON.parse(cached));
+            }
+            const cachedInvoices = localStorage.getItem('last_bank_company_invoices');
+            if (cachedInvoices) {
+              setCompanyInvoicesMap(JSON.parse(cachedInvoices));
             }
           } catch {}
         }
@@ -107,6 +149,10 @@ export default function BankPage() {
           const cached = localStorage.getItem('last_bank_statement_data');
           if (cached) {
             setBankData(JSON.parse(cached));
+          }
+          const cachedInvoices = localStorage.getItem('last_bank_company_invoices');
+          if (cachedInvoices) {
+            setCompanyInvoicesMap(JSON.parse(cachedInvoices));
           }
         } catch {}
       })
@@ -154,6 +200,17 @@ export default function BankPage() {
           transactions: item.transactions,
         });
         setCurrentStatementId(item.id);
+        if (Array.isArray(item.companyInvoices)) {
+          const map: Record<string, CompanyInvoiceItem[]> = {};
+          item.companyInvoices.forEach((ci: CompanyInvoiceRecord) => {
+            if (ci.company && Array.isArray(ci.invoices)) {
+              map[ci.company.trim()] = ci.invoices;
+            }
+          });
+          setCompanyInvoicesMap(map);
+        } else {
+          setCompanyInvoicesMap({});
+        }
         setShowHistoryModal(false);
         handleResetFilters();
         toast.success(language === 'de' ? 'Bankauszug erfolgreich geladen!' : 'Statement loaded!', { id: 'load-stmt' });
@@ -253,6 +310,136 @@ export default function BankPage() {
     if (e.target.files && e.target.files.length > 0) {
       handleFileProcess(e.target.files[0]);
     }
+  };
+
+  // ─── Company Invoices Management ──────────────────────────────────────────
+  const handleOpenUploadForCompany = (companyName: string) => {
+    activeCompanyForUploadRef.current = companyName;
+    if (companyFileInputRef.current) {
+      companyFileInputRef.current.value = '';
+      companyFileInputRef.current.click();
+    }
+  };
+
+  const handleCompanyFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    const company = activeCompanyForUploadRef.current;
+    if (!files || files.length === 0 || !company) return;
+
+    setUploadingCompany(company);
+    const toastId = toast.loading(
+      language === 'de'
+        ? `Lade ${files.length} Belege für "${company}" hoch...`
+        : `Uploading ${files.length} invoice(s) for "${company}"...`
+    );
+
+    try {
+      const uploadedDocs: CompanyInvoiceItem[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const res: UploadedDocumentRef = await uploadDocumentWithProgress(file);
+        uploadedDocs.push({
+          path: res.path,
+          originalName: res.originalName || file.name,
+          mimeType: res.mimeType || file.type || 'application/pdf',
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+
+      // Append to existing company invoices
+      const currentList = companyInvoicesMap[company] || [];
+      const updatedList = [...currentList, ...uploadedDocs];
+
+      const newMap = {
+        ...companyInvoicesMap,
+        [company]: updatedList,
+      };
+      setCompanyInvoicesMap(newMap);
+
+      // Save to local storage
+      try {
+        localStorage.setItem('last_bank_company_invoices', JSON.stringify(newMap));
+      } catch {}
+
+      // Persist to backend
+      await bankApi.saveCompanyInvoices({
+        statementId: currentStatementId || undefined,
+        company,
+        invoices: updatedList,
+      });
+
+      toast.success(
+        language === 'de'
+          ? `${uploadedDocs.length} Beleg(e) für "${company}" gespeichert!`
+          : `${uploadedDocs.length} invoice(s) for "${company}" saved!`,
+        { id: toastId }
+      );
+    } catch (err: any) {
+      toast.error(
+        language === 'de'
+          ? `Fehler beim Hochladen der Belege: ${err.message || 'Serverfehler'}`
+          : `Failed to upload invoices: ${err.message || 'Server error'}`,
+        { id: toastId }
+      );
+    } finally {
+      setUploadingCompany(null);
+      if (companyFileInputRef.current) {
+        companyFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveCompanyInvoice = async (company: string, invoicePath: string) => {
+    if (!confirm(language === 'de' ? 'Möchten Sie diesen Beleg wirklich entfernen?' : 'Remove this invoice?')) {
+      return;
+    }
+
+    const currentList = companyInvoicesMap[company] || [];
+    const updatedList = currentList.filter((inv) => inv.path !== invoicePath);
+
+    const newMap = {
+      ...companyInvoicesMap,
+      [company]: updatedList,
+    };
+    setCompanyInvoicesMap(newMap);
+
+    try {
+      localStorage.setItem('last_bank_company_invoices', JSON.stringify(newMap));
+    } catch {}
+
+    try {
+      await bankApi.saveCompanyInvoices({
+        statementId: currentStatementId || undefined,
+        company,
+        invoices: updatedList,
+      });
+      if (viewingCompanyInvoices && viewingCompanyInvoices.company === company) {
+        setViewingCompanyInvoices({
+          company,
+          invoices: updatedList,
+        });
+      }
+      toast.success(language === 'de' ? 'Beleg entfernt.' : 'Invoice removed.');
+    } catch {
+      toast.error(language === 'de' ? 'Fehler beim Aktualisieren.' : 'Update failed.');
+    }
+  };
+
+  const handleOpenDocumentViewer = (doc: CompanyInvoiceItem, company: string) => {
+    // Construct fake entry compatible with DocumentViewer
+    setViewingDocEntry({
+      _id: doc.path,
+      voucherNo: company,
+      bookingText: company,
+      documents: [
+        {
+          path: doc.path,
+          originalName: doc.originalName,
+          mimeType: doc.mimeType,
+        },
+      ],
+    });
   };
 
   // Dynamic list of companies from CSV
@@ -612,12 +799,22 @@ export default function BankPage() {
         </div>
       </div>
 
-      {/* Hidden File Input */}
+      {/* Hidden File Input for Statement CSV */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={onFileSelect}
         accept=".csv,text/csv"
+        className="hidden"
+      />
+
+      {/* Hidden File Input for Company Invoices (supports multiple files) */}
+      <input
+        type="file"
+        ref={companyFileInputRef}
+        onChange={handleCompanyFilesSelected}
+        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*"
+        multiple
         className="hidden"
       />
 
@@ -1134,12 +1331,15 @@ export default function BankPage() {
                         <ArrowUpDown size={12} className={companySortField === 'totalAmount' ? 'text-brand-600' : 'text-slate-400'} />
                       </div>
                     </th>
+                    <th className="px-4 py-3 text-center">
+                      {language === 'de' ? 'Rechnungen / Belege (Invoices)' : 'Invoices / Receipts'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {companySummary.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-medium">
                         {language === 'de' ? 'Keine Unternehmen entsprechen den Filterkriterien.' : 'No companies match the filter criteria.'}
                       </td>
                     </tr>
@@ -1147,6 +1347,8 @@ export default function BankPage() {
                     companySummary.map((item, idx) => {
                       const isIncome = item.totalAmount >= 0;
                       const accountsArr = Array.from(item.accountNumbers);
+                      const compInvoices = companyInvoicesMap[item.company] || [];
+                      const isCurrentlyUploading = uploadingCompany === item.company;
 
                       // Date text
                       const rawDatesArr = Array.from(item.rawDates);
@@ -1215,6 +1417,49 @@ export default function BankPage() {
                             isIncome ? 'text-emerald-600' : 'text-rose-600'
                           }`}>
                             {isIncome ? `+${formatCurrency(item.totalAmount)}` : formatCurrency(item.totalAmount)}
+                          </td>
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              {compInvoices.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingCompanyInvoices({ company: item.company, invoices: compInvoices })}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-lg transition-colors shadow-2xs"
+                                  title={compInvoices.map((i) => i.originalName).join(', ')}
+                                >
+                                  <Eye size={13} />
+                                  <span>{compInvoices.length} {language === 'de' ? (compInvoices.length === 1 ? 'Beleg' : 'Belege') : (compInvoices.length === 1 ? 'Invoice' : 'Invoices')}</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenUploadForCompany(item.company)}
+                                disabled={isCurrentlyUploading}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all ${
+                                  compInvoices.length > 0
+                                    ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:text-brand-600'
+                                    : 'bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border-indigo-200 shadow-2xs'
+                                }`}
+                                title={
+                                  language === 'de'
+                                    ? `Rechnung/Beleg für "${item.company}" hochladen`
+                                    : `Upload invoice/receipt for "${item.company}"`
+                                }
+                              >
+                                {isCurrentlyUploading ? (
+                                  <>
+                                    <Loader2 size={13} className="animate-spin text-brand-600" />
+                                    <span>{language === 'de' ? 'Laden...' : 'Uploading...'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud size={13} />
+                                    <span>{compInvoices.length > 0 ? (language === 'de' ? '+ Weiterer' : '+ Add More') : (language === 'de' ? 'Beleg laden' : 'Upload Invoice')}</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1585,6 +1830,148 @@ export default function BankPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* COMPANY INVOICES LIST & MANAGE MODAL                                    */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewingCompanyInvoices && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-brand-50 text-brand-600">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                    <span>{viewingCompanyInvoices.company}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-700">
+                      {viewingCompanyInvoices.invoices.length} {language === 'de' ? 'Belege' : 'Invoices'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {language === 'de'
+                      ? 'Hochgeladene Rechnungen und Zahlungsbelege für dieses Unternehmen'
+                      : 'Uploaded invoices and receipts for this company'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingCompanyInvoices(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-3">
+              {viewingCompanyInvoices.invoices.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 text-xs">
+                  {language === 'de'
+                    ? 'Noch keine Belege für dieses Unternehmen vorhanden.'
+                    : 'No invoices uploaded for this company yet.'}
+                </div>
+              ) : (
+                viewingCompanyInvoices.invoices.map((inv, iIdx) => {
+                  const isPdf = inv.mimeType === 'application/pdf' || inv.originalName.toLowerCase().endsWith('.pdf');
+                  return (
+                    <div
+                      key={inv.path || iIdx}
+                      className="p-3.5 rounded-xl border border-slate-200 hover:border-brand-300 hover:bg-slate-50/70 transition-all flex items-center justify-between gap-3 bg-white"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                            isPdf ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-brand-50 text-brand-600 border border-brand-100'
+                          }`}
+                        >
+                          <FileText size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate" title={inv.originalName}>
+                            {inv.originalName}
+                          </p>
+                          <p className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                            {inv.size && (
+                              <span>{(inv.size / 1024).toFixed(0)} KB</span>
+                            )}
+                            {inv.uploadedAt && (
+                              <span>• {new Date(inv.uploadedAt).toLocaleDateString()}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* View in DocumentViewer */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDocumentViewer(inv, viewingCompanyInvoices.company)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors border border-brand-200/60"
+                          title={language === 'de' ? 'Vollbildanzeige öffnen' : 'View document'}
+                        >
+                          <Eye size={13} />
+                          <span>{language === 'de' ? 'Ansehen' : 'View'}</span>
+                        </button>
+
+                        {/* Download */}
+                        <a
+                          href={`/uploads/${inv.path}?download=true`}
+                          download={inv.originalName}
+                          className="p-1.5 text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                          title={language === 'de' ? 'Herunterladen' : 'Download'}
+                        >
+                          <Download size={13} />
+                        </a>
+
+                        {/* Delete/Remove */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCompanyInvoice(viewingCompanyInvoices.company, inv.path)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                          title={language === 'de' ? 'Beleg entfernen' : 'Remove document'}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setViewingCompanyInvoices(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                {language === 'de' ? 'Schließen' : 'Close'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenUploadForCompany(viewingCompanyInvoices.company)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl transition-all shadow-sm"
+              >
+                <Plus size={14} />
+                <span>{language === 'de' ? 'Weiteren Beleg hinzufügen' : 'Add Another Invoice'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* INTEGRATED DOCUMENT VIEWER (PREVIEW MODAL)                              */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewingDocEntry && (
+        <DocumentViewer
+          entry={viewingDocEntry}
+          onClose={() => setViewingDocEntry(null)}
+        />
       )}
     </div>
   );
