@@ -20,7 +20,6 @@ import {
   Trash2,
   Clock,
   ArrowRight,
-  AlertTriangle,
   Info,
   FileText,
   Eye,
@@ -565,47 +564,6 @@ export default function BankPage() {
     return list;
   }, [filteredTransactions, companySortField, companySortDirection]);
 
-  // Detect companies with multiple account numbers/IBANs in the uploaded statement
-  // A company is considered to have conflicting accounts if it has >= 2 distinct, non-empty account numbers/IBANs.
-  // Exception: Ambikapathy Suyatharsan is the account owner / director and legitimately uses multiple accounts.
-  const isMultipleAccountAllowed = (companyName: string): boolean => {
-    const clean = companyName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return clean.includes('ambikapathy') || clean.includes('suyatharsan');
-  };
-
-  const conflictingCompanies = useMemo(() => {
-    if (!bankData) return [];
-
-    const compAccountMap = new Map<string, Set<string>>();
-
-    bankData.transactions.forEach((tx) => {
-      const comp = (tx.company || '').trim();
-      const acc = (tx.accountNumber || '').trim();
-      if (!comp || !acc || acc === '-' || acc.toLowerCase() === 'unbekannt') return;
-
-      // Skip rule for exempted entities (Ambikapathy Suyatharsan)
-      if (isMultipleAccountAllowed(comp)) return;
-
-      if (!compAccountMap.has(comp)) {
-        compAccountMap.set(comp, new Set<string>());
-      }
-      compAccountMap.get(comp)!.add(acc);
-    });
-
-    const conflicts: { company: string; accounts: string[]; count: number }[] = [];
-    compAccountMap.forEach((accountsSet, company) => {
-      if (accountsSet.size > 1) {
-        conflicts.push({
-          company,
-          accounts: Array.from(accountsSet),
-          count: accountsSet.size,
-        });
-      }
-    });
-
-    return conflicts;
-  }, [bankData]);
-
   // Sorted transactions for the All Transactions section
   const sortedTransactions = useMemo(() => {
     const list = [...filteredTransactions];
@@ -664,6 +622,11 @@ export default function BankPage() {
     setSearchQuery('');
   };
 
+  const escapeCsvCell = (val: string | number | undefined | null): string => {
+    if (val === undefined || val === null) return '""';
+    return `"${String(val).replace(/"/g, '""')}"`;
+  };
+
   const handleExportCsv = () => {
     if (sortedTransactions.length === 0) return;
 
@@ -677,16 +640,20 @@ export default function BankPage() {
       'Währung',
     ];
     const rows = sortedTransactions.map((tx) => [
-      tx.rawDate || tx.bookingDate,
-      `"${(tx.company || '').replace(/"/g, '""')}"`,
-      `"${(tx.accountNumber || '').replace(/"/g, '""')}"`,
-      `"${(tx.transactionType || '').replace(/"/g, '""')}"`,
-      `"${(tx.purpose || '').replace(/"/g, '""')}"`,
-      tx.amount.toFixed(2).replace('.', ','),
-      tx.currency || 'EUR',
+      escapeCsvCell(tx.rawDate || tx.bookingDate || ''),
+      escapeCsvCell(tx.company || ''),
+      escapeCsvCell(tx.accountNumber || ''),
+      escapeCsvCell(tx.transactionType || ''),
+      escapeCsvCell(tx.purpose || ''),
+      escapeCsvCell(tx.amount.toFixed(2).replace('.', ',')),
+      escapeCsvCell(tx.currency || 'EUR'),
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n');
+    const csvContent = '\uFEFFsep=;\r\n' + [
+      headers.map(escapeCsvCell).join(';'),
+      ...rows.map((r) => r.join(';')),
+    ].join('\r\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -722,16 +689,20 @@ export default function BankPage() {
       }
 
       return [
-        `"${(item.company || '').replace(/"/g, '""')}"`,
-        `"${accounts.replace(/"/g, '""')}"`,
-        `"${dateDisplay.replace(/"/g, '""')}"`,
-        item.count,
-        item.totalAmount.toFixed(2).replace('.', ','),
-        'EUR',
+        escapeCsvCell(item.company || ''),
+        escapeCsvCell(accounts),
+        escapeCsvCell(dateDisplay),
+        escapeCsvCell(item.count),
+        escapeCsvCell(item.totalAmount.toFixed(2).replace('.', ',')),
+        escapeCsvCell('EUR'),
       ];
     });
 
-    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n');
+    const csvContent = '\uFEFFsep=;\r\n' + [
+      headers.map(escapeCsvCell).join(';'),
+      ...rows.map((r) => r.join(';')),
+    ].join('\r\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1162,88 +1133,6 @@ export default function BankPage() {
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* MULTIPLE ACCOUNTS PER COMPANY WARNING ALERT (BEFORE SUMMARY)            */}
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {conflictingCompanies.length > 0 && (
-            <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 shadow-xs transition-all">
-              <div className="flex items-start gap-3.5">
-                <div className="p-2.5 rounded-xl bg-amber-100 text-amber-700 shrink-0 mt-0.5">
-                  <AlertTriangle size={22} className="animate-pulse" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
-                      <span>
-                        {language === 'de'
-                          ? 'Achtung: Mehrere Kontonummern für dasselbe Unternehmen gefunden!'
-                          : 'Warning: Multiple Account Numbers Found for the Same Company!'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-xs font-black bg-amber-200 text-amber-900 border border-amber-300">
-                        {conflictingCompanies.length} {language === 'de' ? 'Firma(en)' : 'company/companies'}
-                      </span>
-                    </h3>
-                  </div>
-                  <p className="text-xs text-amber-800/90 mt-1 font-medium leading-relaxed">
-                    {language === 'de'
-                      ? 'In der hochgeladenen CSV-Datei wurden für das folgende Unternehmen mehrere unterschiedliche Kontonummern/IBANs festgestellt. Dies sollte in der Regel nicht vorkommen. Bitte überprüfen Sie die Bankdaten auf etwaige Unstimmigkeiten oder Tippfehler:'
-                      : 'In the uploaded bank statement, multiple different account numbers/IBANs were found for the same company. This should typically not exist. Please review the affected accounts for discrepancies or errors:'}
-                  </p>
-
-                  <div className="mt-3.5 space-y-2.5">
-                    {conflictingCompanies.map((c, cIdx) => (
-                      <div
-                        key={cIdx}
-                        className="bg-white/95 rounded-xl border border-amber-200/90 p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-xs text-slate-900 truncate">
-                              {c.company}
-                            </span>
-                            <span className="text-[11px] font-semibold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                              {c.accounts.length} {language === 'de' ? 'verschiedene Konten' : 'different accounts'}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              {language === 'de' ? 'Gefundene Konten:' : 'Found Accounts:'}
-                            </span>
-                            {c.accounts.map((acc, aIdx) => (
-                              <button
-                                key={aIdx}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCompany(c.company);
-                                  setAccountSearchText(acc);
-                                }}
-                                title={language === 'de' ? 'Nach diesem Konto filtern' : 'Filter by this account'}
-                                className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
-                              >
-                                {acc}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCompany(c.company);
-                            setAccountSearchText('');
-                          }}
-                          className="self-start sm:self-center shrink-0 text-[11px] font-bold px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-2xs"
-                        >
-                          {language === 'de' ? 'Firma filtern' : 'Filter Company'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
           {/* 1. SUMMARY BY COMPANY SECTION (PLACED BEFORE ALL TRANSACTIONS)        */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
@@ -1361,32 +1250,13 @@ export default function BankPage() {
                         dateDisplay = `${formatDate(item.earliestDate)} - ${formatDate(item.latestDate)} (${rawDatesArr.length} Daten)`;
                       }
 
-                      const hasAccountConflict = accountsArr.length > 1 && !isMultipleAccountAllowed(item.company);
-
                       return (
                         <tr
                           key={idx}
-                          className={`transition-colors ${
-                            hasAccountConflict ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-slate-50/70'
-                          }`}
+                          className="hover:bg-slate-50/70 transition-colors"
                         >
                           <td className="px-4 py-3 font-bold text-slate-900 max-w-[200px]">
-                            <div className="flex items-center gap-2">
-                              <span>{item.company}</span>
-                              {hasAccountConflict && (
-                                <span
-                                  title={
-                                    language === 'de'
-                                      ? 'Warnung: Dieser Firma sind mehrere unterschiedliche Kontonummern zugeordnet!'
-                                      : 'Warning: Multiple different accounts are assigned to this company!'
-                                  }
-                                  className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0"
-                                >
-                                  <AlertTriangle size={11} className="text-amber-600" />
-                                  <span>{accountsArr.length} {language === 'de' ? 'Konten' : 'Accounts'}</span>
-                                </span>
-                              )}
-                            </div>
+                            <span>{item.company}</span>
                           </td>
                           <td className="px-4 py-3 font-mono text-[11px] text-slate-600 max-w-[170px]">
                             {accountsArr.length > 0 ? (
@@ -1394,7 +1264,7 @@ export default function BankPage() {
                                 {accountsArr.map((acc, aIdx) => (
                                   <div
                                     key={aIdx}
-                                    className={`truncate ${hasAccountConflict ? 'text-amber-900 font-semibold' : ''}`}
+                                    className="truncate"
                                     title={acc}
                                   >
                                     {acc}
