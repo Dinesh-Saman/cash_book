@@ -216,28 +216,49 @@ export function parseBankCsv(content: string, fileName: string, fileSize: number
   );
 
   // Column matching with comprehensive aliases for German bank variants
-  const findCol = (keywords: string[]): number => {
-    return headerCols.findIndex((col) => keywords.some((kw) => col.includes(kw)));
+  // First attempt exact matches, then prefix/exact substring matches to avoid false positives (e.g. 'umsatz' matching 'umsatzart')
+  const findCol = (exactKeywords: string[], partialKeywords: string[] = []): number => {
+    // 1. Try exact match first
+    const exactIdx = headerCols.findIndex((col) =>
+      exactKeywords.some((kw) => col === kw || col.replace(/[^a-z0-9äöüß]/g, '') === kw.replace(/[^a-z0-9äöüß]/g, ''))
+    );
+    if (exactIdx !== -1) return exactIdx;
+
+    // 2. Try keywords starting with or exact word tokens
+    const tokenIdx = headerCols.findIndex((col) => {
+      const tokens = col.split(/[\s\/\-_;:,()]+/);
+      return exactKeywords.some((kw) => tokens.includes(kw) || col.includes(kw));
+    });
+    if (tokenIdx !== -1) return tokenIdx;
+
+    // 3. Fallback to partial keywords
+    if (partialKeywords.length > 0) {
+      return headerCols.findIndex((col) => partialKeywords.some((kw) => col.includes(kw)));
+    }
+    return -1;
   };
 
-  const colDate = findCol(['buchungstag', 'buchungsdatum', 'valutadatum', 'datum']);
-  const colValuta = findCol(['valutadatum', 'wertstellung', 'wert']);
-  const colType = findCol(['buchungstext', 'umsatzart', 'vorgang', 'art']);
+  const colDate = findCol(['buchungstag', 'buchungsdatum', 'valutadatum', 'datum'], ['buchung', 'datum']);
+  const colValuta = findCol(['valutadatum', 'wertstellung', 'wert'], ['valuta']);
+  const colType = findCol(['umsatzart', 'buchungstext', 'vorgang', 'art', 'transaktionstyp'], ['text', 'vorgang']);
   const colCompany = findCol([
-    'beguenstigter',
+    'begünstigter / auftraggeber',
+    'beguenstigter / auftraggeber',
+    'begünstigter/auftraggeber',
     'begünstigter',
-    'zahlungspflichtiger',
+    'beguenstigter',
     'auftraggeber',
+    'zahlungspflichtiger',
     'empfänger',
     'empfaenger',
-    'name',
     'partner',
+    'name',
   ]);
-  const colPurpose = findCol(['verwendungszweck', 'beschreibung', 'notiz', 'details', 'text']);
-  const colAccount = findCol(['kontonummer', 'iban', 'kontonr', 'konto']);
-  const colBic = findCol(['blz', 'bic', 'bankleitzahl', 'swift']);
-  const colAmount = findCol(['betrag', 'amount', 'umsatz']);
-  const colCurrency = findCol(['waehrung', 'währung', 'currency']);
+  const colPurpose = findCol(['verwendungszweck', 'beschreibung', 'notiz', 'details'], ['verwendungszweck', 'zweck']);
+  const colAccount = findCol(['iban / kontonummer', 'iban/kontonummer', 'kontonummer', 'iban', 'kontonr']);
+  const colBic = findCol(['bic', 'blz', 'bankleitzahl', 'swift']);
+  const colAmount = findCol(['betrag', 'betrag (eur)', 'betrag in eur', 'amount'], ['betrag', 'umsatz']);
+  const colCurrency = findCol(['währung', 'waehrung', 'currency', 'whg']);
   const colOwnAccount = findCol(['auftragskonto', 'eigenes konto', 'quellkonto', 'kontoinhaber']);
 
   // Extract metadata from lines before header

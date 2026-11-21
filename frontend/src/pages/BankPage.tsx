@@ -5,6 +5,7 @@ import {
   Calendar,
   Building2,
   CreditCard,
+  Landmark,
   Filter,
   RotateCcw,
   Download,
@@ -27,7 +28,7 @@ import {
   Plus,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { parseBankCsv, BankParsedData } from '../lib/bankParser';
+import { parseBankCsv, BankParsedData, BankTransaction, normalizeBankAccountId } from '../lib/bankParser';
 import { useTranslation } from '../store/languageStore';
 import CustomSelect, { SelectOption } from '../components/ui/CustomSelect';
 import DatePickerInput from '../components/ui/DatePickerInput';
@@ -80,6 +81,7 @@ export default function BankPage() {
   const [modalIsDragging, setModalIsDragging] = useState(false);
 
   // Filters
+  const [selectedBankAccount, setSelectedBankAccount] = useState<string>('ALL');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [selectedCompany, setSelectedCompany] = useState<string>('ALL');
@@ -1068,7 +1070,7 @@ export default function BankPage() {
                 </span>
               </div>
 
-              {(fromDate || toDate || selectedCompany !== 'ALL' || accountSearchText || searchQuery) && (
+              {(selectedBankAccount !== 'ALL' || fromDate || toDate || selectedCompany !== 'ALL' || accountSearchText || searchQuery) && (
                 <button
                   onClick={handleResetFilters}
                   className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1 rounded-lg transition-colors"
@@ -1079,7 +1081,26 @@ export default function BankPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {/* Bank Account Dropdown with 3 options: All Accounts, 350_1292218_00, 350_1292218_01 */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Landmark size={13} className="text-slate-400" />
+                  <span>{language === 'de' ? 'Bankkonto' : 'Bank Account'}</span>
+                </label>
+                <CustomSelect
+                  value={selectedBankAccount}
+                  onChange={(val) => setSelectedBankAccount(val)}
+                  options={[
+                    { value: 'ALL', label: language === 'de' ? 'Alle Konten' : 'All Accounts' },
+                    { value: '350_1292218_00', label: '350_1292218_00' },
+                    { value: '350_1292218_01', label: '350_1292218_01' },
+                  ]}
+                  className="w-full"
+                  buttonClassName="text-xs bg-slate-50 border-slate-200 font-semibold"
+                />
+              </div>
+
               {/* From Date */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
@@ -1527,7 +1548,12 @@ export default function BankPage() {
                           }`}
                         >
                           <td className="px-4 py-3 text-slate-800 font-medium whitespace-nowrap">
-                            {tx.rawDate || formatDate(tx.bookingDate)}
+                            <div>{tx.rawDate || formatDate(tx.bookingDate)}</div>
+                            {tx.ownAccountNumber && (
+                              <span className="inline-block mt-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80">
+                                {tx.ownAccountNumber}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-semibold text-slate-900 max-w-[190px] truncate">
                             <span title={tx.company}>{tx.company}</span>
@@ -1697,12 +1723,12 @@ export default function BankPage() {
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">
-                    {language === 'de' ? 'Neue Bank-CSV hochladen' : 'Upload New Bank CSV'}
+                    {language === 'de' ? 'Bank-CSV hochladen (bis zu 5 Dateien)' : 'Upload Bank CSV (Up to 5 files)'}
                   </h3>
                   <p className="text-xs text-slate-500">
                     {language === 'de'
-                      ? 'Ziehen Sie die Datei per Drag & Drop hierher oder wählen Sie sie aus'
-                      : 'Drag & drop your CSV file here or browse from device'}
+                      ? 'Ziehen Sie bis zu 5 CSV-Dateien per Drag & Drop hierher oder wählen Sie sie aus'
+                      : 'Drag & drop up to 5 CSV files here or browse from device'}
                   </p>
                 </div>
               </div>
@@ -1729,7 +1755,7 @@ export default function BankPage() {
                   e.preventDefault();
                   setModalIsDragging(false);
                   if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    handleFileProcess(e.dataTransfer.files[0]);
+                    handleFilesProcess(e.dataTransfer.files);
                   }
                 }}
                 onClick={() => fileInputRef.current?.click()}
@@ -1747,18 +1773,18 @@ export default function BankPage() {
 
                 <div>
                   <h4 className="text-sm sm:text-base font-bold text-slate-800">
-                    {language === 'de' ? 'Bank-CSV hier hineinziehen' : 'Drop your bank statement here'}
+                    {language === 'de' ? 'Bank-CSV-Dateien hier hineinziehen' : 'Drop your bank statement files here'}
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-xs">
                     {language === 'de'
-                      ? 'oder klicken, um eine CSV-Datei von Ihrem Computer auszuwählen'
-                      : 'or click to browse a CSV file from your computer'}
+                      ? 'oder klicken, um bis zu 5 CSV-Dateien von Ihrem Computer auszuwählen'
+                      : 'or click to browse up to 5 CSV files from your computer'}
                   </p>
                 </div>
 
                 <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs mt-1">
                   <FileSpreadsheet size={13} className="text-brand-600" />
-                  <span>{language === 'de' ? 'Nur .csv-Dateien' : 'Only .csv files'}</span>
+                  <span>{language === 'de' ? 'Bis zu 5 .csv-Dateien (z.B. Konto 00 & 01)' : 'Up to 5 .csv files (e.g. accounts 00 & 01)'}</span>
                 </div>
               </div>
 
@@ -1767,8 +1793,8 @@ export default function BankPage() {
                 <Info size={14} className="text-brand-600 shrink-0 mt-0.5" />
                 <span>
                   {language === 'de'
-                    ? 'Nach dem Hochladen wird der Auszug automatisch analysiert, im Verlauf gespeichert und bleibt dauerhaft erhalten.'
-                    : 'Once uploaded, the statement is instantly analyzed, saved to history, and permanently preserved.'}
+                    ? 'Unterstützt Mehrfach-Uploads (max. 5 Dateien). Konten wie 350_1292218_00 und 350_1292218_01 werden automatisch erkannt, zugeordnet und zusammengeführt.'
+                    : 'Supports multiple uploads (max 5 files). Accounts such as 350_1292218_00 and 350_1292218_01 are automatically detected, tagged, and merged.'}
                 </span>
               </div>
             </div>
