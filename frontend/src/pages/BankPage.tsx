@@ -35,6 +35,7 @@ import DatePickerInput from '../components/ui/DatePickerInput';
 import { bankApi } from '../lib/api';
 import { uploadDocumentWithProgress, UploadedDocumentRef } from '../lib/documentUpload';
 import DocumentViewer from '../components/cashbook/DocumentViewer';
+import { exportCompanySummaryToPdf, exportAllTransactionsToPdf } from '../lib/pdfExport';
 
 export interface CompanyInvoiceItem {
   path: string;
@@ -322,7 +323,7 @@ export default function BankPage() {
           fileName:
             filesToProcess.length === 1
               ? filesToProcess[0].name
-              : `${filesToProcess.length} Dateien (${filesToProcess.map((f) => f.name).join(', ')})`,
+              : `${filesToProcess.length} ${language === 'de' ? 'Dateien' : 'Files'} (${filesToProcess.map((f) => f.name).join(', ')})`,
           fileSize: totalSize,
           uploadedAt: new Date().toISOString(),
           accountName: Array.from(accountNames).join(' / ') || undefined,
@@ -523,6 +524,92 @@ export default function BankPage() {
     });
   };
 
+  // Extracted list of individual file names for clean display
+  const statementFilesList = useMemo(() => {
+    if (!bankData?.metadata.fileName) return [];
+    const raw = bankData.metadata.fileName;
+    const match = raw.match(/^\d+\s+(?:Files|Dateien)\s*\((.+)\)$/i);
+    if (match) {
+      return match[1].split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    const fromTx = Array.from(
+      new Set(bankData.transactions.map((t) => t.sourceFileName).filter(Boolean))
+    ) as string[];
+    if (fromTx.length > 1) {
+      return fromTx;
+    }
+    return [raw];
+  }, [bankData]);
+
+  // Structured breakdown of bank accounts
+  const statementAccountsBreakdown = useMemo(() => {
+    if (!bankData) return [];
+
+    const knownAccounts: Record<string, { iban: string }> = {
+      '350_1292218_00': {
+        iban: 'DE76440700240129221800',
+      },
+      '350_1292218_01': {
+        iban: 'DE49440700240129221801',
+      },
+    };
+
+    const accMap = new Map<string, { id: string; iban?: string; count: number }>();
+
+    bankData.transactions.forEach((tx) => {
+      const accId =
+        tx.ownAccountNumber ||
+        normalizeBankAccountId(
+          bankData.metadata?.ownAccountNumber,
+          tx.sourceFileName || bankData.metadata?.fileName,
+          bankData.metadata?.ownIban
+        ) ||
+        bankData.metadata?.ownAccountNumber ||
+        'Konto';
+
+      let item = accMap.get(accId);
+      if (!item) {
+        const known = knownAccounts[accId];
+        item = {
+          id: accId,
+          iban: known?.iban || bankData.metadata.ownIban,
+          count: 0,
+        };
+        accMap.set(accId, item);
+      }
+      item.count += 1;
+    });
+
+    if (accMap.size <= 1 && bankData.metadata.ownAccountNumber?.includes(',')) {
+      const parts = bankData.metadata.ownAccountNumber.split(',').map((p) => p.trim());
+      const ibans = (bankData.metadata.ownIban || '').split(',').map((p) => p.trim());
+
+      const res: { id: string; iban?: string; count?: number }[] = [];
+      parts.forEach((accId, idx) => {
+        const known = knownAccounts[accId];
+        res.push({
+          id: accId,
+          iban: known?.iban || (ibans[idx] || ibans[0]),
+          count: bankData.transactions.filter((t) => t.ownAccountNumber === accId).length,
+        });
+      });
+      return res;
+    }
+
+    return Array.from(accMap.values());
+  }, [bankData]);
+
+  // Clean title for statement banner
+  const statementTitle = useMemo(() => {
+    if (!bankData) return '';
+    if (statementFilesList.length > 1) {
+      return language === 'de'
+        ? `${statementFilesList.length} Bankauszüge konsolidiert`
+        : `${statementFilesList.length} Bank Statements Consolidated`;
+    }
+    return statementFilesList[0] || bankData.metadata.fileName;
+  }, [bankData, statementFilesList, language]);
+
   // Dynamic list of companies from CSV
   const companyOptions: SelectOption[] = useMemo(() => {
     if (!bankData) return [{ value: 'ALL', label: language === 'de' ? 'Alle Unternehmen' : 'All Companies' }];
@@ -590,15 +677,17 @@ export default function BankPage() {
     });
   }, [bankData, selectedBankAccount, fromDate, toDate, selectedCompany, accountSearchText, searchQuery]);
 
-  // Grouped by Company Summary with Dates
+  // Grouped by Company & Account Summary with Dates
   const companySummary = useMemo(() => {
     const map = new Map<
       string,
       {
         company: string;
+        accountNumber: string;
+        ownAccountNumber?: string;
+        accountNumbers: Set<string>;
         count: number;
         totalAmount: number;
-        accountNumbers: Set<string>;
         dates: Set<string>;
         rawDates: Set<string>;
         earliestDate: string;
@@ -607,25 +696,42 @@ export default function BankPage() {
     >();
 
     filteredTransactions.forEach((tx) => {
-      let existing = map.get(tx.company);
+      const acc = (tx.accountNumber || '-').trim();
+      const ownAcc = (
+        tx.ownAccountNumber ||
+        normalizeBankAccountId(
+          bankData?.metadata?.ownAccountNumber,
+          tx.sourceFileName || bankData?.metadata?.fileName,
+          bankData?.metadata?.ownIban
+        ) ||
+        ''
+      ).trim();
+
+      // Group key includes company, account number/IBAN, and bank account
+      // When a company has multiple accounts, they appear as separate records
+      const groupKey = `${tx.company.trim()}___${acc}___${ownAcc}`;
+
+      let existing = map.get(groupKey);
       if (!existing) {
         existing = {
           company: tx.company,
+          accountNumber: acc,
+          ownAccountNumber: ownAcc || undefined,
+          accountNumbers: new Set<string>(acc && acc !== '-' ? [acc] : []),
           count: 0,
           totalAmount: 0,
-          accountNumbers: new Set<string>(),
           dates: new Set<string>(),
           rawDates: new Set<string>(),
           earliestDate: tx.bookingDate,
           latestDate: tx.bookingDate,
         };
-        map.set(tx.company, existing);
+        map.set(groupKey, existing);
       }
 
       existing.count += 1;
       existing.totalAmount += tx.amount;
-      if (tx.accountNumber && tx.accountNumber !== '-') {
-        existing.accountNumbers.add(tx.accountNumber);
+      if (acc && acc !== '-') {
+        existing.accountNumbers.add(acc);
       }
       existing.dates.add(tx.bookingDate);
       if (tx.rawDate) {
@@ -641,11 +747,14 @@ export default function BankPage() {
 
     const list = Array.from(map.values());
 
-    // Sort company summary
+    // Sort company summary: primary by selected field, secondary so same companies stay together
     list.sort((a, b) => {
       let cmp = 0;
       if (companySortField === 'company') {
         cmp = a.company.localeCompare(b.company, undefined, { sensitivity: 'base' });
+        if (cmp === 0) {
+          cmp = (a.accountNumber || '').localeCompare(b.accountNumber || '');
+        }
       } else if (companySortField === 'count') {
         cmp = a.count - b.count;
       } else if (companySortField === 'totalAmount') {
@@ -657,7 +766,22 @@ export default function BankPage() {
     });
 
     return list;
-  }, [filteredTransactions, companySortField, companySortDirection]);
+  }, [filteredTransactions, bankData, companySortField, companySortDirection]);
+
+  // Set of company names that appear multiple times (i.e. having 2 or more distinct accounts)
+  const multiAccountCompanies = useMemo(() => {
+    const counts = new Map<string, number>();
+    companySummary.forEach((item) => {
+      counts.set(item.company, (counts.get(item.company) || 0) + 1);
+    });
+    const set = new Set<string>();
+    counts.forEach((count, comp) => {
+      if (count > 1) {
+        set.add(comp);
+      }
+    });
+    return set;
+  }, [companySummary]);
 
   // Sorted transactions for the All Transactions section
   const sortedTransactions = useMemo(() => {
@@ -718,101 +842,147 @@ export default function BankPage() {
     setSearchQuery('');
   };
 
-  const escapeCsvCell = (val: string | number | undefined | null): string => {
-    if (val === undefined || val === null) return '""';
-    return `"${String(val).replace(/"/g, '""')}"`;
+  const formatDisplayFileName = (name?: string, lang: 'de' | 'en' = 'de'): string => {
+    if (!name) return '';
+    if (lang === 'en') {
+      return name
+        .replace(/(\d+)\s+Dateien\b/gi, '$1 Files')
+        .replace(/1\s+Datei\b/gi, '1 File');
+    } else {
+      return name
+        .replace(/(\d+)\s+Files\b/gi, '$1 Dateien')
+        .replace(/1\s+File\b/gi, '1 Datei');
+    }
   };
 
-  const handleExportCsv = () => {
-    if (sortedTransactions.length === 0) return;
-
-    const headers = [
-      'Buchungstag',
-      'Bankkonto',
-      'Unternehmen (Begünstigter / Auftraggeber)',
-      'Kontonummer / IBAN',
-      'Umsatzart',
-      'Verwendungszweck',
-      'Betrag',
-      'Währung',
-    ];
-    const rows = sortedTransactions.map((tx) => [
-      escapeCsvCell(tx.rawDate || tx.bookingDate || ''),
-      escapeCsvCell(tx.ownAccountNumber || ''),
-      escapeCsvCell(tx.company || ''),
-      escapeCsvCell(tx.accountNumber || ''),
-      escapeCsvCell(tx.transactionType || ''),
-      escapeCsvCell(tx.purpose || ''),
-      escapeCsvCell(tx.amount.toFixed(2).replace('.', ',')),
-      escapeCsvCell(tx.currency || 'EUR'),
-    ]);
-
-    const csvContent = '\uFEFFsep=;\r\n' + [
-      headers.map(escapeCsvCell).join(';'),
-      ...rows.map((r) => r.join(';')),
-    ].join('\r\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bank_Alle_Buchungen_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(language === 'de' ? 'Alle Buchungen exportiert!' : 'Transactions exported!');
+  const formatDisplayAccountName = (name?: string, lang: 'de' | 'en' = 'de'): string => {
+    if (!name) return '';
+    const cleaned = name
+      .replace(/Business\s*Premium(?:Konto|\s+Account)?/gi, '')
+      .replace(/Best(?:Konto|\s+Account)?/gi, '')
+      .replace(/^[\s/–—-]+|[\s/–—-]+$/g, '')
+      .trim();
+    if (!cleaned) return '';
+    if (lang === 'en') {
+      return cleaned
+        .replace(/PremiumKonto/gi, 'Premium Account')
+        .replace(/\bKonto\b/gi, 'Account');
+    }
+    return cleaned;
   };
 
-  const handleExportCompanySummaryCsv = () => {
+  const formatDisplayPeriodText = (text?: string, lang: 'de' | 'en' = 'de'): string => {
+    if (!text) return '';
+    if (lang === 'en') {
+      return text
+        .replace(/(\d+)\s+Daten\b/gi, '$1 dates')
+        .replace(/Letzter Kontostand/gi, 'Last Balance');
+    } else {
+      return text
+        .replace(/(\d+)\s+dates\b/gi, '$1 Daten')
+        .replace(/Last Balance/gi, 'Letzter Kontostand');
+    }
+  };
+
+  const handleExportCompanySummaryPdf = () => {
     if (companySummary.length === 0) return;
+    try {
+      const items = companySummary.map((item) => {
+        const rawDatesArr = Array.from(item.rawDates);
+        let dateDisplay = '';
+        if (rawDatesArr.length === 1) {
+          dateDisplay = rawDatesArr[0];
+        } else if (rawDatesArr.length <= 3) {
+          dateDisplay = rawDatesArr.join(', ');
+        } else {
+          dateDisplay = `${formatDate(item.earliestDate)} - ${formatDate(item.latestDate)} (${rawDatesArr.length} Daten)`;
+        }
 
-    const headers = [
-      'Unternehmen (Company Name)',
-      'Zugehörige Kontonummer(n) / IBAN(s)',
-      'Buchungsdatum / Zeitraum',
-      'Anzahl Buchungen (Count)',
-      'Gesamtbetrag (Sum Amount)',
-      'Währung (Currency)',
-    ];
+        const ownAcc =
+          item.ownAccountNumber ||
+          normalizeBankAccountId(
+            bankData?.metadata?.ownAccountNumber,
+            bankData?.metadata?.fileName,
+            bankData?.metadata?.ownIban
+          ) ||
+          undefined;
 
-    const rows = companySummary.map((item) => {
-      const accounts = Array.from(item.accountNumbers).join(', ');
-      const rawDatesArr = Array.from(item.rawDates);
-      let dateDisplay = '';
-      if (rawDatesArr.length === 1) {
-        dateDisplay = rawDatesArr[0];
-      } else if (rawDatesArr.length <= 3) {
-        dateDisplay = rawDatesArr.join(', ');
-      } else {
-        dateDisplay = `${formatDate(item.earliestDate)} - ${formatDate(item.latestDate)} (${rawDatesArr.length} Daten)`;
-      }
+        return {
+          company: item.company,
+          ownAccountNumber: ownAcc,
+          accountNumber: item.accountNumber,
+          periodText: dateDisplay,
+          count: item.count,
+          totalAmount: item.totalAmount,
+          currency: 'EUR',
+          isMultiAccount: multiAccountCompanies.has(item.company),
+        };
+      });
 
-      return [
-        escapeCsvCell(item.company || ''),
-        escapeCsvCell(accounts),
-        escapeCsvCell(dateDisplay),
-        escapeCsvCell(item.count),
-        escapeCsvCell(item.totalAmount.toFixed(2).replace('.', ',')),
-        escapeCsvCell('EUR'),
-      ];
-    });
+      exportCompanySummaryToPdf(
+        items,
+        {
+          ownAccountNumber: selectedBankAccount !== 'ALL' ? selectedBankAccount : bankData?.metadata?.ownAccountNumber,
+          accountName: bankData?.metadata?.accountName,
+          periodText: bankData?.metadata?.periodText,
+          language,
+        }
+      );
+      toast.success(
+        language === 'de'
+          ? 'Zusammenfassung als PDF erfolgreich heruntergeladen!'
+          : 'Company summary PDF downloaded successfully!'
+      );
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      toast.error(language === 'de' ? 'Fehler beim PDF-Export' : 'Failed to export PDF');
+    }
+  };
 
-    const csvContent = '\uFEFFsep=;\r\n' + [
-      headers.map(escapeCsvCell).join(';'),
-      ...rows.map((r) => r.join(';')),
-    ].join('\r\n');
+  const handleExportTransactionsPdf = () => {
+    if (sortedTransactions.length === 0) return;
+    try {
+      const items = sortedTransactions.map((tx) => {
+        const ownAcc =
+          tx.ownAccountNumber ||
+          normalizeBankAccountId(
+            bankData?.metadata?.ownAccountNumber,
+            bankData?.metadata?.fileName,
+            bankData?.metadata?.ownIban
+          ) ||
+          undefined;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bank_Zusammenfassung_Unternehmen_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(
-      language === 'de'
-        ? 'Zusammenfassung nach Unternehmen als CSV heruntergeladen!'
-        : 'Company summary downloaded as CSV!'
-    );
+        return {
+          bookingDate: tx.bookingDate,
+          rawDate: tx.rawDate,
+          ownAccountNumber: ownAcc,
+          company: tx.company,
+          accountNumber: tx.accountNumber,
+          transactionType: tx.transactionType || '',
+          purpose: tx.purpose,
+          amount: tx.amount,
+          currency: tx.currency || 'EUR',
+        };
+      });
+
+      exportAllTransactionsToPdf(
+        items,
+        {
+          ownAccountNumber: selectedBankAccount !== 'ALL' ? selectedBankAccount : bankData?.metadata?.ownAccountNumber,
+          accountName: bankData?.metadata?.accountName,
+          periodText: bankData?.metadata?.periodText,
+          language,
+        }
+      );
+      toast.success(
+        language === 'de'
+          ? 'Alle Buchungen als PDF erfolgreich heruntergeladen!'
+          : 'All transactions PDF downloaded successfully!'
+      );
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      toast.error(language === 'de' ? 'Fehler beim PDF-Export' : 'Failed to export PDF');
+    }
   };
 
   return (
@@ -857,11 +1027,12 @@ export default function BankPage() {
                 <span>{language === 'de' ? 'Neue CSV laden' : 'Upload New CSV'}</span>
               </button>
               <button
-                onClick={handleExportCsv}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-sm"
+                onClick={handleExportTransactionsPdf}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-xl transition-all shadow-2xs"
+                title={language === 'de' ? 'Als PDF-Dokument herunterladen' : 'Download as PDF document'}
               >
-                <Download size={14} />
-                <span>{language === 'de' ? 'Exportieren' : 'Export'}</span>
+                <FileText size={14} className="text-rose-600" />
+                <span>{language === 'de' ? 'PDF Exportieren' : 'Export PDF'}</span>
               </button>
             </>
           )}
@@ -933,51 +1104,115 @@ export default function BankPage() {
           </div>
         </div>
       ) : (
-        /* Metadata Banner */
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
-              <FileCheck size={22} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900 text-sm sm:text-base">
-                  {bankData.metadata.fileName}
-                </span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  {bankData.metadata.totalRecords} {language === 'de' ? 'Buchungen' : 'Transactions'}
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 flex items-center gap-1">
-                  <CheckCircle2 size={11} className="text-emerald-500" />
-                  {language === 'de' ? 'Gespeichert' : 'Saved'}
-                </span>
+        /* Metadata Banner - Executive Redesign */
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            {/* Left: Icon, Clean Title, and Badges */}
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-brand-500/20">
+                <FileCheck size={24} className="stroke-[2.2]" />
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                {bankData.metadata.accountName && (
-                  <span>
-                    <strong className="text-slate-700 font-semibold">{bankData.metadata.accountName}</strong>
-                    {bankData.metadata.ownAccountNumber && ` (${bankData.metadata.ownAccountNumber})`}
-                  </span>
-                )}
-                {bankData.metadata.ownIban && (
-                  <span className="font-mono text-[11px] text-slate-600">
-                    IBAN: {bankData.metadata.ownIban}
-                  </span>
-                )}
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                    {statementTitle}
+                  </h2>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                      {bankData.metadata.totalRecords} {language === 'de' ? 'Buchungen' : 'Transactions'}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80 flex items-center gap-1">
+                      <CheckCircle2 size={11} className="text-emerald-500" />
+                      {language === 'de' ? 'Gespeichert' : 'Saved'}
+                    </span>
+                    {statementAccountsBreakdown.length > 1 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/70">
+                        {statementAccountsBreakdown.length} {language === 'de' ? 'Konten' : 'Accounts'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Period Display */}
                 {bankData.metadata.periodText && (
-                  <span className="text-slate-500">{bankData.metadata.periodText}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1 font-medium">
+                    <Calendar size={13} className="text-slate-400" />
+                    <span className="text-slate-400">{language === 'de' ? 'Zeitraum:' : 'Period:'}</span>
+                    <span className="font-semibold text-slate-700">
+                      {formatDisplayPeriodText(bankData.metadata.periodText, language)}
+                    </span>
+                  </div>
                 )}
-              </p>
+              </div>
+            </div>
+
+            {/* Right: Upload Button */}
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-xl transition-all shadow-2xs hover:shadow-xs"
+              >
+                <UploadCloud size={14} className="stroke-[2.5]" />
+                <span>{language === 'de' ? 'Weitere CSV laden' : 'Upload Another File'}</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/70 px-3 py-1.5 rounded-xl transition-colors"
-            >
-              {language === 'de' ? 'Andere Datei hochladen' : 'Upload Another File'}
-            </button>
+          {/* Bottom Detail Section: Horizontal Inline Layout for Accounts and Files */}
+          <div className="space-y-2 pt-3 border-t border-slate-100">
+            {/* Accounts Section (Inline) */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 shrink-0 mr-1">
+                <Landmark size={12} className="text-brand-600" />
+                {language === 'de' ? 'Bankkonten:' : 'Bank Accounts:'}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {statementAccountsBreakdown.map((acc, i) => (
+                  <div
+                    key={acc.id || i}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50/90 border border-slate-200/90 text-xs shadow-2xs hover:bg-slate-100/60 transition-colors"
+                  >
+                    <span className="font-mono font-bold text-brand-700 bg-brand-100/80 px-2 py-0.5 rounded-lg text-xs">
+                      {acc.id}
+                    </span>
+                    {acc.iban && (
+                      <span className="font-mono text-slate-500 text-[11px]">
+                        IBAN: <span className="font-semibold text-slate-700">{acc.iban}</span>
+                      </span>
+                    )}
+                    {acc.count !== undefined && acc.count > 0 && (
+                      <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs ml-1 shrink-0">
+                        {acc.count} {language === 'de' ? 'Umsätze' : 'transactions'}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Uploaded Files Section */}
+            {statementFilesList.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <FileSpreadsheet size={12} className="text-emerald-600" />
+                  {language === 'de' ? 'Eingelesene Dateien:' : 'Uploaded Files:'}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {statementFilesList.map((fileName, idx) => (
+                    <div
+                      key={idx}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50/90 border border-slate-200/90 text-slate-700 font-mono text-[11px] shadow-2xs hover:bg-slate-100/60 transition-colors"
+                    >
+                      <div className="p-0.5 rounded bg-white border border-slate-200 text-brand-600 shrink-0">
+                        <FileText size={12} />
+                      </div>
+                      <span className="font-semibold text-slate-800 select-all">{fileName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1273,22 +1508,22 @@ export default function BankPage() {
 
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-brand-100 text-brand-800">
-                  {companySummary.length} {language === 'de' ? 'Unternehmen' : 'companies'}
+                  {companySummary.length} {language === 'de' ? (companySummary.length === 1 ? 'Eintrag' : 'Einträge') : (companySummary.length === 1 ? 'record' : 'records')}
                 </span>
 
                 {companySummary.length > 0 && (
                   <button
                     type="button"
-                    onClick={handleExportCompanySummaryCsv}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs hover:text-brand-700"
+                    onClick={handleExportCompanySummaryPdf}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-xl transition-all shadow-2xs hover:text-rose-800"
                     title={
                       language === 'de'
-                        ? 'Zusammenfassung nach Unternehmen als CSV herunterladen'
-                        : 'Download summary by company as CSV'
+                        ? 'Zusammenfassung als PDF-Dokument herunterladen'
+                        : 'Download summary as PDF document'
                     }
                   >
-                    <Download size={13} className="text-brand-600" />
-                    <span>{language === 'de' ? 'Zusammenfassung als CSV' : 'Download Summary CSV'}</span>
+                    <FileText size={13} className="text-rose-600" />
+                    <span>{language === 'de' ? 'PDF herunterladen' : 'Download PDF'}</span>
                   </button>
                 )}
               </div>
@@ -1308,7 +1543,7 @@ export default function BankPage() {
                       </div>
                     </th>
                     <th className="px-4 py-3">
-                      {language === 'de' ? 'Zugehörige Kontonummer(n)' : 'Associated Account(s)'}
+                      {language === 'de' ? 'Zugehörige Kontonummer / IBAN' : 'Associated Account / IBAN'}
                     </th>
                     <th
                       onClick={() => handleCompanySort('dates')}
@@ -1353,7 +1588,6 @@ export default function BankPage() {
                   ) : (
                     companySummary.map((item, idx) => {
                       const isIncome = item.totalAmount >= 0;
-                      const accountsArr = Array.from(item.accountNumbers);
                       const compInvoices = companyInvoicesMap[item.company] || [];
                       const isCurrentlyUploading = uploadingCompany === item.company;
 
@@ -1370,25 +1604,24 @@ export default function BankPage() {
 
                       return (
                         <tr
-                          key={idx}
+                          key={`${item.company}-${item.accountNumber}-${item.ownAccountNumber || ''}-${idx}`}
                           className="hover:bg-slate-50/70 transition-colors"
                         >
-                          <td className="px-4 py-3 font-bold text-slate-900 max-w-[200px]">
-                            <span>{item.company}</span>
+                          <td className="px-4 py-3 font-bold text-slate-900 max-w-[220px]">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="truncate" title={item.company}>{item.company}</span>
+                              {multiAccountCompanies.has(item.company) && item.ownAccountNumber && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/70 rounded px-1.5 py-0.5 w-fit">
+                                  {item.ownAccountNumber}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-4 py-3 font-mono text-[11px] text-slate-600 max-w-[170px]">
-                            {accountsArr.length > 0 ? (
-                              <div className="space-y-0.5">
-                                {accountsArr.map((acc, aIdx) => (
-                                  <div
-                                    key={aIdx}
-                                    className="truncate"
-                                    title={acc}
-                                  >
-                                    {acc}
-                                  </div>
-                                ))}
-                              </div>
+                          <td className="px-4 py-3 font-mono text-[11px] text-slate-600 max-w-[180px]">
+                            {item.accountNumber && item.accountNumber !== '-' ? (
+                              <span className="truncate block" title={item.accountNumber}>
+                                {item.accountNumber}
+                              </span>
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
@@ -1479,9 +1712,27 @@ export default function BankPage() {
                 </div>
               </div>
 
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">
-                {sortedTransactions.length} {language === 'de' ? 'Umsätze' : 'transactions'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">
+                  {sortedTransactions.length} {language === 'de' ? 'Umsätze' : 'transactions'}
+                </span>
+
+                {sortedTransactions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleExportTransactionsPdf}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-xl transition-all shadow-2xs hover:text-rose-800"
+                    title={
+                      language === 'de'
+                        ? 'Alle Buchungen als PDF-Dokument herunterladen'
+                        : 'Download all transactions as PDF document'
+                    }
+                  >
+                    <FileText size={13} className="text-rose-600" />
+                    <span>{language === 'de' ? 'PDF herunterladen' : 'Download PDF'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1549,11 +1800,6 @@ export default function BankPage() {
                         >
                           <td className="px-4 py-3 text-slate-800 font-medium whitespace-nowrap">
                             <div>{tx.rawDate || formatDate(tx.bookingDate)}</div>
-                            {tx.ownAccountNumber && (
-                              <span className="inline-block mt-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80">
-                                {tx.ownAccountNumber}
-                              </span>
-                            )}
                           </td>
                           <td className="px-4 py-3 font-semibold text-slate-900 max-w-[190px] truncate">
                             <span title={tx.company}>{tx.company}</span>
@@ -1657,7 +1903,7 @@ export default function BankPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-sm">{item.fileName}</span>
+                            <span className="font-bold text-slate-900 text-sm">{formatDisplayFileName(item.fileName, language)}</span>
                             {isCurrent && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-100 text-brand-800">
                                 {language === 'de' ? 'Aktiv' : 'Active'}
@@ -1665,8 +1911,8 @@ export default function BankPage() {
                             )}
                           </div>
                           <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                            {item.accountName && <span>{item.accountName}</span>}
-                            {item.periodText && <span>{item.periodText}</span>}
+                            {item.accountName && <span>{formatDisplayAccountName(item.accountName, language)}</span>}
+                            {item.periodText && <span>{formatDisplayPeriodText(item.periodText, language)}</span>}
                             <span className="font-semibold text-slate-700">
                               {item.totalRecords} {language === 'de' ? 'Buchungen' : 'items'}
                             </span>
