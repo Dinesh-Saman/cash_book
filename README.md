@@ -2,6 +2,8 @@
 
 A full-featured, cloud-ready **Cash Book Management System** for Mr. Ambikapathy.
 
+Production releases are git tags. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Quick Start
 
 ### Prerequisites
