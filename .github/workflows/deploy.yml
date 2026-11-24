@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy tag to production
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEPLOY_SSH_KEY}" ]]; then
+            echo "Missing DEPLOY_SSH_KEY secret" >&2
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/kassenbuch_deploy
+          chmod 600 ~/.ssh/kassenbuch_deploy
+          printf '%s\n' 'kassenbuch.nrwsystem.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDmOe0eIHx1ljvVOCNfXOb9/Vpp2DSPHCU/IqWML0VVu' > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/kassenbuch_deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
+            "ubuntu@kassenbuch.nrwsystem.de" \
+            "$TAG"
