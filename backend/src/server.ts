@@ -13,13 +13,14 @@ import app from './app';
 import { connectDB } from './db';
 import { createUploadsDir } from './utils/uploadsDir';
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 createUploadsDir();
 
-// Start HTTP server immediately so port 5000 is open and Vite/clients don't get ECONNREFUSED
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Bind to localhost by default so the port is only reachable through Nginx.
+app.listen(PORT, HOST, () => {
+  console.log(`Server is running on ${HOST}:${PORT}`);
 });
 
 // Initialize MongoDB connection and seeder in the background
