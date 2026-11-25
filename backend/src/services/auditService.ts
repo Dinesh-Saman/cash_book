@@ -2,7 +2,7 @@ import { AuditLog } from '../models/AuditLog';
 
 interface AuditLogParams {
   action: string;
-  entityType: 'entry' | 'booking_rule' | 'user' | 'settings' | 'month' | 'year';
+  entityType: 'entry' | 'booking_rule' | 'user' | 'settings' | 'month' | 'year' | 'bank_statement';
   entityId?: string;
   description: string;
   performedBy: string;

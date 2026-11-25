@@ -3,7 +3,7 @@ import { IUser } from './User';
 
 export interface IAuditLog extends Document {
   action: string;
-  entityType: 'entry' | 'booking_rule' | 'user' | 'settings' | 'month' | 'year';
+  entityType: 'entry' | 'booking_rule' | 'user' | 'settings' | 'month' | 'year' | 'bank_statement';
   entityId?: string;
   description: string;
   performedBy: IUser['_id'];
@@ -13,7 +13,7 @@ export interface IAuditLog extends Document {
 
 const auditLogSchema = new Schema<IAuditLog>({
   action: { type: String, required: true },
-  entityType: { type: String, enum: ['entry', 'booking_rule', 'user', 'settings', 'month', 'year'], required: true },
+  entityType: { type: String, enum: ['entry', 'booking_rule', 'user', 'settings', 'month', 'year', 'bank_statement'], required: true },
   entityId: { type: String },
   description: { type: String, required: true },
   performedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

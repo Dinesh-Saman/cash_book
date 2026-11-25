@@ -76,10 +76,12 @@ export default function BankPage() {
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [downloadingHistoryId, setDownloadingHistoryId] = useState<string | null>(null);
 
   // Upload Popup Modal
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [modalIsDragging, setModalIsDragging] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'merge' | 'replace'>('merge');
 
   // Filters
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('ALL');
@@ -240,6 +242,65 @@ export default function BankPage() {
     }
   };
 
+  const handleDownloadHistoryPdf = async (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    if (downloadingHistoryId === item._id) return;
+
+    try {
+      setDownloadingHistoryId(item._id);
+
+      let stmtData: { metadata: any; transactions: any[] };
+      if (currentStatementId === item._id && bankData) {
+        stmtData = bankData;
+      } else {
+        const res = await bankApi.getById(item._id);
+        if (!res.data?.data) {
+          throw new Error('Statement not found');
+        }
+        stmtData = res.data.data;
+      }
+
+      const baseName = item.fileName.replace(/\.[^/.]+$/, '').trim() || 'Bankauszug';
+
+      const exportItems = stmtData.transactions.map((tx: any) => ({
+        bookingDate: tx.bookingDate,
+        rawDate: tx.rawDate,
+        ownAccountNumber:
+          tx.ownAccountNumber ||
+          normalizeBankAccountId(
+            stmtData.metadata?.ownAccountNumber,
+            tx.sourceFileName || stmtData.metadata?.fileName,
+            stmtData.metadata?.ownIban
+          ) ||
+          '',
+        company: tx.company,
+        accountNumber: tx.accountNumber,
+        transactionType: tx.transactionType || '',
+        purpose: tx.purpose,
+        amount: tx.amount,
+        currency: tx.currency || 'EUR',
+      }));
+
+      exportAllTransactionsToPdf(
+        exportItems,
+        {
+          ownAccountNumber: stmtData.metadata?.ownAccountNumber,
+          periodText: stmtData.metadata?.periodText,
+          language,
+        },
+        `${baseName}.pdf`
+      );
+      toast.success(
+        language === 'de' ? 'PDF-Auszug erfolgreich heruntergeladen!' : 'PDF statement downloaded successfully!'
+      );
+    } catch (err) {
+      console.error('Failed to download statement PDF:', err);
+      toast.error(language === 'de' ? 'Fehler beim Herunterladen der PDF.' : 'Failed to download PDF.');
+    } finally {
+      setDownloadingHistoryId(null);
+    }
+  };
+
   const readFileWithEncoding = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer();
     try {
@@ -291,12 +352,39 @@ export default function BankPage() {
         parsedResults.push(parsed);
       }
 
+      const shouldMerge = Boolean(bankData && uploadMode === 'merge');
+
       // Merge statements into single consolidated dataset
-      const allTransactions: BankTransaction[] = [];
+      const allTransactions: BankTransaction[] = shouldMerge ? [...bankData!.transactions] : [];
       const accountNames = new Set<string>();
       const ownAccountNumbers = new Set<string>();
       const ownIbans = new Set<string>();
-      let totalSize = 0;
+      let totalSize = shouldMerge ? (bankData!.metadata.fileSize || 0) : 0;
+
+      if (shouldMerge && bankData) {
+        if (bankData.metadata.accountName) {
+          bankData.metadata.accountName.split(' / ').map((s) => s.trim()).filter(Boolean).forEach((s) => accountNames.add(s));
+        }
+        if (bankData.metadata.ownAccountNumber) {
+          bankData.metadata.ownAccountNumber.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => ownAccountNumbers.add(s));
+        }
+        if (bankData.metadata.ownIban) {
+          bankData.metadata.ownIban.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => ownIbans.add(s));
+        }
+      }
+
+      const getTxKey = (tx: BankTransaction) =>
+        `${tx.bookingDate}|${tx.amount}|${(tx.company || '').trim()}|${(tx.accountNumber || '').trim()}|${(tx.purpose || '').trim()}|${(tx.ownAccountNumber || '').trim()}`;
+
+      const existingCounts = new Map<string, number>();
+      if (shouldMerge) {
+        allTransactions.forEach((tx) => {
+          const key = getTxKey(tx);
+          existingCounts.set(key, (existingCounts.get(key) || 0) + 1);
+        });
+      }
+      const seenNewCounts = new Map<string, number>();
+      let addedCount = 0;
 
       parsedResults.forEach((res, fileIdx) => {
         totalSize += res.metadata.fileSize || 0;
@@ -305,6 +393,15 @@ export default function BankPage() {
         if (res.metadata.ownIban) ownIbans.add(res.metadata.ownIban);
 
         res.transactions.forEach((tx, txIdx) => {
+          if (shouldMerge) {
+            const key = getTxKey(tx);
+            const seen = (seenNewCounts.get(key) || 0) + 1;
+            seenNewCounts.set(key, seen);
+            if (seen <= (existingCounts.get(key) || 0)) {
+              return;
+            }
+          }
+          addedCount += 1;
           allTransactions.push({
             ...tx,
             id: tx.id || `tx-${fileIdx}-${txIdx}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -318,12 +415,21 @@ export default function BankPage() {
       const earliestDate = allTransactions.length > 0 ? allTransactions[allTransactions.length - 1].bookingDate : '';
       const latestDate = allTransactions.length > 0 ? allTransactions[0].bookingDate : '';
 
+      const combinedFileNames = Array.from(
+        new Set([
+          ...(shouldMerge ? statementFilesList : []),
+          ...filesToProcess.map((f) => f.name),
+        ])
+      ).filter(Boolean);
+
+      const mergedFileName =
+        combinedFileNames.length === 1
+          ? combinedFileNames[0]
+          : `${combinedFileNames.length} ${language === 'de' ? 'Dateien' : 'Files'} (${combinedFileNames.join(', ')})`;
+
       const mergedData: BankParsedData = {
         metadata: {
-          fileName:
-            filesToProcess.length === 1
-              ? filesToProcess[0].name
-              : `${filesToProcess.length} ${language === 'de' ? 'Dateien' : 'Files'} (${filesToProcess.map((f) => f.name).join(', ')})`,
+          fileName: mergedFileName,
           fileSize: totalSize,
           uploadedAt: new Date().toISOString(),
           accountName: Array.from(accountNames).join(' / ') || undefined,
@@ -340,6 +446,9 @@ export default function BankPage() {
       };
 
       setBankData(mergedData);
+      if (!shouldMerge) {
+        setCompanyInvoicesMap({});
+      }
 
       try {
         localStorage.setItem('last_bank_statement_data', JSON.stringify(mergedData));
@@ -353,9 +462,16 @@ export default function BankPage() {
       setSearchQuery('');
       setShowUploadModal(false);
 
+      const preservedInvoices = shouldMerge
+        ? Object.entries(companyInvoicesMap).map(([company, invoices]) => ({ company, invoices }))
+        : [];
+
       setIsSaving(true);
       try {
-        const saveRes = await bankApi.save(mergedData);
+        const saveRes = await bankApi.save({
+          ...mergedData,
+          companyInvoices: preservedInvoices,
+        });
         if (saveRes.data?.data?.id) {
           setCurrentStatementId(saveRes.data.data.id);
         }
@@ -366,9 +482,13 @@ export default function BankPage() {
       }
 
       toast.success(
-        language === 'de'
-          ? `${filesToProcess.length} CSV-Datei(en) erfolgreich eingelesen! ${allTransactions.length} Buchungen geladen.`
-          : `${filesToProcess.length} CSV file(s) parsed & saved! ${allTransactions.length} transactions loaded.`,
+        shouldMerge
+          ? language === 'de'
+            ? `${filesToProcess.length} CSV-Datei(en) hinzugefügt! ${addedCount} neue Buchungen (Gesamt: ${allTransactions.length}).`
+            : `${filesToProcess.length} CSV file(s) merged! ${addedCount} new transactions added (Total: ${allTransactions.length}).`
+          : language === 'de'
+            ? `${filesToProcess.length} CSV-Datei(en) erfolgreich eingelesen! ${allTransactions.length} Buchungen geladen.`
+            : `${filesToProcess.length} CSV file(s) parsed & saved! ${allTransactions.length} transactions loaded.`,
         { id: toastId }
       );
     } catch (err: any) {
@@ -1020,7 +1140,10 @@ export default function BankPage() {
           {bankData && (
             <>
               <button
-                onClick={() => setShowUploadModal(true)}
+                onClick={() => {
+                  setUploadMode('merge');
+                  setShowUploadModal(true);
+                }}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-xl transition-all shadow-2xs"
               >
                 <UploadCloud size={15} />
@@ -1150,7 +1273,10 @@ export default function BankPage() {
             {/* Right: Upload Button */}
             <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
               <button
-                onClick={() => setShowUploadModal(true)}
+                onClick={() => {
+                  setUploadMode('merge');
+                  setShowUploadModal(true);
+                }}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-xl transition-all shadow-2xs hover:shadow-xs"
               >
                 <UploadCloud size={14} className="stroke-[2.5]" />
@@ -1530,7 +1656,7 @@ export default function BankPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse">
+              <table className="w-full min-w-[920px] text-xs text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-100/70 border-b border-slate-200/80 text-slate-600 font-bold">
                     <th
@@ -1573,7 +1699,7 @@ export default function BankPage() {
                         <ArrowUpDown size={12} className={companySortField === 'totalAmount' ? 'text-brand-600' : 'text-slate-400'} />
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center">
+                    <th className="px-4 py-3 text-center min-w-[220px]">
                       {language === 'de' ? 'Rechnungen / Belege (Invoices)' : 'Invoices / Receipts'}
                     </th>
                   </tr>
@@ -1639,13 +1765,13 @@ export default function BankPage() {
                           }`}>
                             {isIncome ? `+${formatCurrency(item.totalAmount)}` : formatCurrency(item.totalAmount)}
                           </td>
-                          <td className="px-4 py-3 text-center whitespace-nowrap">
-                            <div className="inline-flex items-center gap-1.5">
+                          <td className="px-4 py-3 text-center whitespace-nowrap min-w-[220px]">
+                            <div className="inline-flex items-center justify-center gap-1.5">
                               {compInvoices.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => setViewingCompanyInvoices({ company: item.company, invoices: compInvoices })}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-lg transition-colors shadow-2xs"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/80 rounded-lg transition-colors shadow-2xs shrink-0"
                                   title={compInvoices.map((i) => i.originalName).join(', ')}
                                 >
                                   <Eye size={13} />
@@ -1657,7 +1783,7 @@ export default function BankPage() {
                                 type="button"
                                 onClick={() => handleOpenUploadForCompany(item.company)}
                                 disabled={isCurrentlyUploading}
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all ${
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all shrink-0 ${
                                   compInvoices.length > 0
                                     ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:text-brand-600'
                                     : 'bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border-indigo-200 shadow-2xs'
@@ -1924,16 +2050,31 @@ export default function BankPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Direct PDF Download Icon */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadHistoryPdf(e, item)}
+                          disabled={downloadingHistoryId === item._id}
+                          className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50"
+                          title={language === 'de' ? 'Bankauszug als PDF herunterladen' : 'Download statement as PDF'}
+                        >
+                          {downloadingHistoryId === item._id ? (
+                            <Loader2 size={16} className="animate-spin text-brand-600" />
+                          ) : (
+                            <Download size={16} />
+                          )}
+                        </button>
+
                         <button
                           type="button"
                           onClick={(e) => handleDeleteHistoryItem(e, item._id)}
-                          title="Löschen"
+                          title={language === 'de' ? 'Löschen' : 'Delete'}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                         >
                           <Trash2 size={16} />
                         </button>
-                        <div className="text-slate-400">
+                        <div className="text-slate-400 p-1">
                           <ArrowRight size={16} />
                         </div>
                       </div>
@@ -1990,7 +2131,34 @@ export default function BankPage() {
             </div>
 
             {/* Modal Body / Dropzone */}
-            <div className="p-6">
+            <div className="p-6 space-y-4">
+              {bankData && (
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setUploadMode('merge')}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold transition-all text-center ${
+                      uploadMode === 'merge'
+                        ? 'bg-white text-brand-700 shadow-xs border border-brand-200/80'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {language === 'de' ? 'Mit aktuellem zusammenführen' : 'Merge with Current'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadMode('replace')}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold transition-all text-center ${
+                      uploadMode === 'replace'
+                        ? 'bg-white text-rose-700 shadow-xs border border-rose-200/80'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {language === 'de' ? 'Aktuellen ersetzen' : 'Replace Current'}
+                  </button>
+                </div>
+              )}
+
               <div
                 onDragOver={(e) => {
                   e.preventDefault();

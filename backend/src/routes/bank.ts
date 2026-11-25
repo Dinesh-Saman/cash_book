@@ -103,7 +103,7 @@ router.post('/save', async (req: any, res, next) => {
 
     await logAction({
       action: 'CREATE',
-      entityType: 'bank_statement' as any,
+      entityType: 'bank_statement',
       entityId: statement._id.toString(),
       description: `Uploaded bank statement "${statement.fileName}" (${statement.totalRecords} transactions)`,
       performedBy: req.user?._id,
@@ -163,7 +163,7 @@ router.post('/company-invoices', async (req: any, res, next) => {
 
     await logAction({
       action: 'UPDATE',
-      entityType: 'bank_statement' as any,
+      entityType: 'bank_statement',
       entityId: statement._id.toString(),
       description: `Updated invoices for company "${company}" (${invoices.length} file(s)) in statement "${statement.fileName}"`,
       performedBy: req.user?._id,
@@ -192,7 +192,7 @@ router.delete('/:id', async (req: any, res, next) => {
 
     await logAction({
       action: 'DELETE',
-      entityType: 'bank_statement' as any,
+      entityType: 'bank_statement',
       entityId: req.params.id,
       description: `Deleted bank statement "${statement.fileName}"`,
       performedBy: req.user?._id,
