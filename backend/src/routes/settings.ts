@@ -12,10 +12,39 @@ router.get('/', async (req, res, next) => {
   try {
     let settings = await Settings.findOne();
     if (!settings) {
-      settings = await Settings.create({ openingBalance: 0, cashAccount: '1000', finalizedYears: [] });
-    } else if (!settings.cashAccount) {
-      settings.cashAccount = '1000';
-      await settings.save();
+      settings = await Settings.create({
+        openingBalance: 0,
+        cashAccount: '1000',
+        finalizedYears: [],
+        enabledModules: {
+          cashBook: true,
+          monthlyReports: true,
+          annualReport: true,
+          bank: true,
+          invoices: true,
+          settings: true,
+        },
+      });
+    } else {
+      let needsSave = false;
+      if (!settings.cashAccount) {
+        settings.cashAccount = '1000';
+        needsSave = true;
+      }
+      if (!settings.enabledModules) {
+        settings.enabledModules = {
+          cashBook: true,
+          monthlyReports: true,
+          annualReport: true,
+          bank: true,
+          invoices: true,
+          settings: true,
+        };
+        needsSave = true;
+      }
+      if (needsSave) {
+        await settings.save();
+      }
     }
     res.json({ success: true, data: settings });
   } catch (error) { next(error); }
@@ -35,9 +64,29 @@ router.put('/', async (req: any, res, next) => {
 
     const oldOpeningBalance = settings.openingBalance;
     const oldCashAccount = settings.cashAccount;
+    
+    // Ensure mandatory modules remain true: cashBook and settings cannot be disabled
+    if (req.body.enabledModules) {
+      req.body.enabledModules.cashBook = true;
+      req.body.enabledModules.settings = true;
+    }
+    
     Object.assign(settings, req.body);
     if (!settings.cashAccount) {
       settings.cashAccount = '1000';
+    }
+    if (!settings.enabledModules) {
+      settings.enabledModules = {
+        cashBook: true,
+        monthlyReports: true,
+        annualReport: true,
+        bank: true,
+        invoices: true,
+        settings: true,
+      };
+    } else {
+      settings.enabledModules.cashBook = true;
+      settings.enabledModules.settings = true;
     }
     await settings.save();
 

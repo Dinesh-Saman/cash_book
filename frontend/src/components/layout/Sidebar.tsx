@@ -14,10 +14,12 @@ import {
   Wallet,
   CheckCircle2,
   Landmark,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import { useCashbookStore } from '../../store/cashbookStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { useTranslation } from '../../store/languageStore';
 import LanguageToggle from '../ui/LanguageToggle';
 import { cn } from '../../lib/utils';
@@ -33,8 +35,14 @@ export default function Sidebar() {
   const openIncomeForm = useUIStore((state) => state.openIncomeForm);
   const openExpenseForm = useUIStore((state) => state.openExpenseForm);
   const summary = useCashbookStore((state) => state.summary);
+  const enabledModules = useSettingsStore((state) => state.enabledModules);
+  const fetchSettings = useSettingsStore((state) => state.fetchSettings);
   const { t, language, formatCurrency } = useTranslation();
   const location = useLocation();
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const userPerms = user?.permissions
     ? { ...getDefaultPermissions(user.role), ...user.permissions }
@@ -51,13 +59,16 @@ export default function Sidebar() {
     setSidebarOpen(false);
   }, [location.pathname, setSidebarOpen]);
 
-  const navItems = [
-    { to: '/', icon: Home, label: t('navCashBook') },
-    { to: '/monthly', icon: Calendar, label: t('navMonthlyReports') },
-    { to: '/annual', icon: BarChart2, label: t('navAnnualReport') },
-    { to: '/bank', icon: Landmark, label: t('navBank') },
-    { to: '/settings', icon: Settings, label: t('navSettings') },
+  const allNavItems = [
+    { to: '/', icon: Home, label: t('navCashBook'), moduleKey: 'cashBook' as const, mandatory: true },
+    { to: '/monthly', icon: Calendar, label: t('navMonthlyReports'), moduleKey: 'monthlyReports' as const, mandatory: false },
+    { to: '/annual', icon: BarChart2, label: t('navAnnualReport'), moduleKey: 'annualReport' as const, mandatory: false },
+    { to: '/bank', icon: Landmark, label: t('navBank'), moduleKey: 'bank' as const, mandatory: false },
+    { to: '/invoices', icon: FileSpreadsheet, label: t('navInvoices'), moduleKey: 'invoices' as const, mandatory: false },
+    { to: '/settings', icon: Settings, label: t('navSettings'), moduleKey: 'settings' as const, mandatory: true },
   ];
+
+  const navItems = allNavItems.filter((item) => item.mandatory || (enabledModules[item.moduleKey] ?? true));
 
   const adminItems = [
     { to: '/admin/users', icon: Users, label: t('navUserManagement') },

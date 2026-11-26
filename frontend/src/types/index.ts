@@ -46,6 +46,7 @@ export interface User {
   email: string;
   role: 'admin' | 'accountant' | 'viewer';
   isActive: boolean;
+  twoFactorEnabled?: boolean;
   permissions?: UserPermissions;
 }
 
@@ -68,6 +69,7 @@ export interface CashBookEntry {
     defaultVat?: 0 | 7 | 19;
   };
   bookingText: string;
+  companyName?: string;
   type: 'income' | 'expense';
   amount: number;
   vatPercentage: 0 | 7 | 19;
@@ -99,6 +101,15 @@ export interface BookingRule {
   accountSKR04?: string;
 }
 
+export interface EnabledModules {
+  cashBook: boolean;
+  monthlyReports: boolean;
+  annualReport: boolean;
+  bank: boolean;
+  invoices: boolean;
+  settings: boolean;
+}
+
 export interface Settings {
   _id: string;
   openingBalance: number;
@@ -111,6 +122,7 @@ export interface Settings {
   finalizedYears: number[];
   lockedMonths?: string[];
   unlockedMonths?: string[];
+  enabledModules?: EnabledModules;
 }
 
 export interface Summary {

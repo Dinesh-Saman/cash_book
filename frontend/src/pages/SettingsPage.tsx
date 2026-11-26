@@ -1,10 +1,30 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Edit2, Trash2, Save, X, Lock, Unlock, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Save,
+  X,
+  Lock,
+  Unlock,
+  AlertTriangle,
+  RefreshCw,
+  Loader2,
+  ShieldCheck,
+  Check,
+  Calendar,
+  BarChart2,
+  Landmark,
+  FileSpreadsheet,
+  Home,
+  Settings as SettingsIcon,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsApi, bookingRulesApi } from '../lib/api';
-import { type Settings, type BookingRule, getDefaultPermissions } from '../types';
+import { settingsApi, bookingRulesApi, authApi } from '../lib/api';
+import { type Settings, type BookingRule, type EnabledModules, getDefaultPermissions } from '../types';
 import { useAuthStore } from '../store/authStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../store/languageStore';
 import { translateBookingRuleName } from '../lib/i18n/translations';
 import { formatAmountWithCommas, parseFormattedAmount } from '../lib/utils';
@@ -52,6 +72,8 @@ export default function SettingsPage() {
   const { t, language, getMonthName } = useTranslation();
 
   const [settings, setSettings] = useState<Settings | null>(null);
+  const { enabledModules, updateEnabledModules, fetchSettings } = useSettingsStore();
+  const [isUpdatingModule, setIsUpdatingModule] = useState<string | null>(null);
   const [bookingRules, setBookingRules] = useState<BookingRule[]>([]);
   const [isLoadingRules, setIsLoadingRules] = useState(true);
   const [rulesError, setRulesError] = useState<string | null>(null);
@@ -89,6 +111,61 @@ export default function SettingsPage() {
   const [confirmMonthLock, setConfirmMonthLock] = useState<{ year: number; month: number; action: 'unlock' | 'lock' } | null>(null);
   const [isMonthLocking, setIsMonthLocking] = useState(false);
 
+  // Two-Factor Authentication (2FA)
+  const checkAuth = useAuthStore((s) => s.checkAuth);
+  const [twoFactorSetup, setTwoFactorSetup] = useState<{ secret: string; qrCodeDataUrl: string } | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [isTwoFactorBusy, setIsTwoFactorBusy] = useState(false);
+  const [showDisable2FA, setShowDisable2FA] = useState(false);
+
+  const handleStart2FASetup = async () => {
+    setIsTwoFactorBusy(true);
+    try {
+      const res = await authApi.setup2FA();
+      setTwoFactorSetup({
+        secret: res.data.data.secret,
+        qrCodeDataUrl: res.data.data.qrCodeDataUrl,
+      });
+      setTwoFactorCode('');
+    } catch {
+      toast.error(language === 'de' ? '2FA-Einrichtung fehlgeschlagen.' : 'Failed to initialize 2FA setup.');
+    } finally {
+      setIsTwoFactorBusy(false);
+    }
+  };
+
+  const handleEnable2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTwoFactorBusy(true);
+    try {
+      await authApi.enable2FA(twoFactorCode.trim());
+      await checkAuth();
+      setTwoFactorSetup(null);
+      setTwoFactorCode('');
+      toast.success(language === 'de' ? '2FA erfolgreich aktiviert!' : '2FA enabled successfully!');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Ungültiger Code.' : 'Invalid verification code.'));
+    } finally {
+      setIsTwoFactorBusy(false);
+    }
+  };
+
+  const handleDisable2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTwoFactorBusy(true);
+    try {
+      await authApi.disable2FA(twoFactorCode.trim());
+      await checkAuth();
+      setShowDisable2FA(false);
+      setTwoFactorCode('');
+      toast.success(language === 'de' ? '2FA deaktiviert.' : '2FA disabled.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || (language === 'de' ? 'Ungültiger Code.' : 'Invalid verification code.'));
+    } finally {
+      setIsTwoFactorBusy(false);
+    }
+  };
+
 
   const fetchRules = async () => {
     setIsLoadingRules(true);
@@ -108,6 +185,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    fetchSettings();
     settingsApi
       .get()
       .then((res) => {
@@ -127,6 +205,21 @@ export default function SettingsPage() {
       .catch(() => {});
     fetchRules();
   }, []);
+
+  const handleToggleModule = async (moduleKey: keyof EnabledModules, currentVal: boolean) => {
+    if (moduleKey === 'cashBook' || moduleKey === 'settings') {
+      return; // Mandatory modules cannot be toggled
+    }
+    setIsUpdatingModule(moduleKey);
+    try {
+      await updateEnabledModules({ [moduleKey]: !currentVal });
+      toast.success(t('toastModuleUpdated'));
+    } catch {
+      toast.error(language === 'de' ? 'Fehler beim Aktualisieren der Module.' : 'Failed to update modules.');
+    } finally {
+      setIsUpdatingModule(null);
+    }
+  };
 
   const handleObAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target;
@@ -349,6 +442,143 @@ export default function SettingsPage() {
           {t('settingsSubtitle')}
         </p>
       </div>
+
+      {/* Module Management (Enable / Disable Modules) */}
+      {isAdmin && (
+        <Section title={t('secModuleManagement')}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {t('descModuleManagement')}
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+              {[
+                {
+                  key: 'cashBook' as const,
+                  label: t('navCashBook'),
+                  desc: language === 'de' ? 'Kassenbuch-Transaktionen & Buchungserfassung' : 'Cash Book entries and cash management',
+                  icon: Home,
+                  mandatory: true,
+                },
+                {
+                  key: 'monthlyReports' as const,
+                  label: t('navMonthlyReports'),
+                  desc: language === 'de' ? 'Detaillierte Monatsübersicht & Monatsabschlüsse' : 'Monthly reports and closures',
+                  icon: Calendar,
+                  mandatory: false,
+                },
+                {
+                  key: 'annualReport' as const,
+                  label: t('navAnnualReport'),
+                  desc: language === 'de' ? 'Gesamtjahresbericht & Jahresanalysen' : 'Annual balance and analytics',
+                  icon: BarChart2,
+                  mandatory: false,
+                },
+                {
+                  key: 'bank' as const,
+                  label: t('navBank'),
+                  desc: language === 'de' ? 'Bankumsatz-Import (CSV), Kontoabgleich & Firmen-Zusammenfassung' : 'Bank CSV statement import and reconciliation',
+                  icon: Landmark,
+                  mandatory: false,
+                },
+                {
+                  key: 'invoices' as const,
+                  label: t('navInvoices'),
+                  desc: language === 'de' ? 'Kunden- & Lieferantenrechnungen, Abgleich & Belegarchiv' : 'Invoice tracking and reconciliation',
+                  icon: FileSpreadsheet,
+                  mandatory: false,
+                },
+                {
+                  key: 'settings' as const,
+                  label: t('navSettings'),
+                  desc: language === 'de' ? 'Systemeinstellungen, DATEV, Konten & 2FA' : 'System configuration and preferences',
+                  icon: SettingsIcon,
+                  mandatory: true,
+                },
+              ].map((mod) => {
+                const IconComponent = mod.icon;
+                const isEnabled = mod.mandatory ? true : enabledModules[mod.key] ?? true;
+                const isBusy = isUpdatingModule === mod.key;
+
+                return (
+                  <div
+                    key={mod.key}
+                    className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all ${
+                      isEnabled
+                        ? 'bg-white border-slate-200/90 shadow-2xs hover:border-slate-300'
+                        : 'bg-slate-50/60 border-slate-200 opacity-75'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                              isEnabled
+                                ? 'bg-brand-50 text-brand-600 border border-brand-100'
+                                : 'bg-slate-100 text-slate-400 border border-slate-200'
+                            }`}
+                          >
+                            <IconComponent size={18} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
+                              {mod.label}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {mod.mandatory ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80">
+                            {language === 'de' ? 'Pflicht' : 'Required'}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleToggleModule(mod.key, isEnabled)}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 ${
+                              isEnabled ? 'bg-brand-600' : 'bg-slate-200'
+                            }`}
+                            aria-label={`Toggle ${mod.label}`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                isEnabled ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        {mod.desc}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {mod.mandatory
+                          ? t('moduleMandatory')
+                          : isEnabled
+                          ? t('moduleActive')
+                          : t('moduleInactive')}
+                      </span>
+
+                      {isEnabled && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                          <Check size={11} className="stroke-[3]" />
+                          <span>{language === 'de' ? 'Aktiviert' : 'Enabled'}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* Opening Balance */}
       <Section title={t('secCashBookSettings')}>
@@ -734,6 +964,158 @@ export default function SettingsPage() {
           </form>
         </Section>
       )}
+
+      {/* Two-Factor Authentication (2FA) */}
+      <Section title={language === 'de' ? 'Zwei-Faktor-Authentifizierung (2FA)' : 'Two-Factor Authentication (2FA)'}>
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className={user?.twoFactorEnabled ? 'text-emerald-600' : 'text-slate-400'} />
+                <span className="text-sm font-bold text-slate-900">
+                  {language === 'de' ? 'Authenticator-App (TOTP)' : 'Authenticator App (TOTP)'}
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                    user?.twoFactorEnabled
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}
+                >
+                  {user?.twoFactorEnabled
+                    ? language === 'de' ? 'Aktiviert' : 'Enabled'
+                    : language === 'de' ? 'Deaktiviert' : 'Disabled'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'de'
+                  ? 'Schützen Sie Ihr Konto mit einem 6-stelligen Einmalcode (Google Authenticator, Microsoft Authenticator, Authy).'
+                  : 'Protect your account with a 6-digit verification code (Google Authenticator, Microsoft Authenticator, Authy).'}
+              </p>
+            </div>
+
+            {!user?.twoFactorEnabled && !twoFactorSetup && (
+              <button
+                type="button"
+                onClick={handleStart2FASetup}
+                disabled={isTwoFactorBusy}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors disabled:opacity-50 shrink-0"
+              >
+                {language === 'de' ? '2FA aktivieren' : 'Enable 2FA'}
+              </button>
+            )}
+
+            {user?.twoFactorEnabled && !showDisable2FA && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisable2FA(true);
+                  setTwoFactorCode('');
+                }}
+                className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors shrink-0"
+              >
+                {language === 'de' ? '2FA deaktivieren' : 'Disable 2FA'}
+              </button>
+            )}
+          </div>
+
+          {twoFactorSetup && !user?.twoFactorEnabled && (
+            <form onSubmit={handleEnable2FA} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-center gap-5">
+                <img
+                  src={twoFactorSetup.qrCodeDataUrl}
+                  alt="2FA QR Code"
+                  className="w-40 h-40 rounded-xl border border-slate-200 bg-white p-2 shrink-0"
+                />
+                <div className="space-y-2 text-xs text-slate-600">
+                  <p className="font-bold text-slate-800">
+                    {language === 'de'
+                      ? '1. QR-Code mit Ihrer Authenticator-App scannen'
+                      : '1. Scan this QR code with your Authenticator app'}
+                  </p>
+                  <p>
+                    {language === 'de' ? 'Oder Schlüssel manuell eingeben:' : 'Or enter this setup key manually:'}
+                  </p>
+                  <code className="block px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-xs font-bold text-slate-800 select-all">
+                    {twoFactorSetup.secret}
+                  </code>
+                  <p className="font-bold text-slate-800 pt-1">
+                    {language === 'de'
+                      ? '2. 6-stelligen Code zur Bestätigung eingeben:'
+                      : '2. Enter the 6-digit code to verify:'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      required
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000"
+                      className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-sm text-center tracking-widest"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isTwoFactorBusy || twoFactorCode.length !== 6}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                    >
+                      {language === 'de' ? 'Bestätigen & Aktivieren' : 'Verify & Activate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTwoFactorSetup(null);
+                        setTwoFactorCode('');
+                      }}
+                      className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold"
+                    >
+                      {t('btnCancel')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {showDisable2FA && user?.twoFactorEnabled && (
+            <form onSubmit={handleDisable2FA} className="p-4 bg-rose-50/60 border border-rose-200 rounded-2xl flex flex-wrap items-center gap-3">
+              <span className="text-xs font-semibold text-rose-800">
+                {language === 'de'
+                  ? 'Aktuellen 6-stelligen 2FA-Code zum Deaktivieren eingeben:'
+                  : 'Enter current 6-digit 2FA code to disable:'}
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                required
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                className="w-32 px-3 py-1.5 bg-white border border-rose-200 rounded-xl font-mono text-sm text-center tracking-widest"
+              />
+              <button
+                type="submit"
+                disabled={isTwoFactorBusy || twoFactorCode.length !== 6}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+              >
+                {language === 'de' ? 'Deaktivieren' : 'Confirm Disable'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisable2FA(false);
+                  setTwoFactorCode('');
+                }}
+                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold"
+              >
+                {t('btnCancel')}
+              </button>
+            </form>
+          )}
+        </div>
+      </Section>
 
       {/* Fiscal Year Finalization (SRS §8) */}
       {isAdmin && (

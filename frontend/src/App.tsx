@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
+import { useSettingsStore } from './store/settingsStore';
 import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 import AppLayout from './components/layout/AppLayout';
 
@@ -10,6 +11,7 @@ import CashBookPage from './pages/CashBookPage';
 import MonthlyReportPage from './pages/MonthlyReportPage';
 import AnnualReportPage from './pages/AnnualReportPage';
 import BankPage from './pages/BankPage';
+import InvoicesPage from './pages/InvoicesPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
@@ -23,6 +25,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
   if (user?.role !== 'admin') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function ModuleRoute({ moduleKey, children }: { moduleKey: 'monthlyReports' | 'annualReport' | 'bank' | 'invoices'; children: React.ReactNode }) {
+  const enabledModules = useSettingsStore((state) => state.enabledModules);
+  const isEnabled = enabledModules[moduleKey] ?? true;
+  if (!isEnabled) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -77,9 +86,38 @@ export default function App() {
           }
         >
           <Route index element={<CashBookPage />} />
-          <Route path="monthly" element={<MonthlyReportPage />} />
-          <Route path="annual" element={<AnnualReportPage />} />
-          <Route path="bank" element={<BankPage />} />
+          <Route
+            path="monthly"
+            element={
+              <ModuleRoute moduleKey="monthlyReports">
+                <MonthlyReportPage />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="annual"
+            element={
+              <ModuleRoute moduleKey="annualReport">
+                <AnnualReportPage />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="bank"
+            element={
+              <ModuleRoute moduleKey="bank">
+                <BankPage />
+              </ModuleRoute>
+            }
+          />
+          <Route
+            path="invoices"
+            element={
+              <ModuleRoute moduleKey="invoices">
+                <InvoicesPage />
+              </ModuleRoute>
+            }
+          />
           <Route path="settings" element={<SettingsPage />} />
 
           <Route

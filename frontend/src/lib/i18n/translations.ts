@@ -14,6 +14,7 @@ export const translations = {
     navMonthlyReports: 'Monatsberichte',
     navAnnualReport: 'Jahresbericht',
     navBank: 'Bank',
+    navInvoices: 'Rechnungen',
     navSettings: 'Einstellungen',
     navUserManagement: 'Benutzerverwaltung',
     navAuditLog: 'Prüfprotokoll',
@@ -56,6 +57,7 @@ export const translations = {
     thVat: 'MwSt.',
     thBalance: 'Kassenbestand',
     thDocument: 'Dokument',
+    thCompanyName: 'Firmenname',
     thActions: 'Aktionen',
     tblOpeningBalance: 'Anfangsbestand',
     tblNoEntries: 'Keine Einträge vorhanden',
@@ -203,6 +205,14 @@ export const translations = {
     confirmFinalizeDesc: 'Sind Sie sicher, dass Sie das Geschäftsjahr {year} festschreiben möchten? Danach sind keine Änderungen an den Buchungen dieses Jahres mehr möglich.',
     confirmUnlockTitle: 'Geschäftsjahr {year} entsperren?',
     confirmUnlockDesc: 'Möchten Sie das Geschäftsjahr {year} wirklich wieder entsperren, um Änderungen zu erlauben?',
+    
+    // Module Management
+    secModuleManagement: '🧩 Modulverwaltung (Module aktivieren / deaktivieren)',
+    descModuleManagement: 'Aktivieren oder deaktivieren Sie die Navigationsmodule nach Bedarf. Das Kassenbuch und die Einstellungen sind Pflichtmodule und können nicht deaktiviert werden.',
+    moduleMandatory: 'Pflichtmodul (immer aktiv)',
+    moduleActive: 'Aktiv',
+    moduleInactive: 'Deaktiviert',
+    toastModuleUpdated: 'Moduleinstellungen erfolgreich aktualisiert.',
 
     // User Management Page
     userMgmtTitle: 'Benutzerverwaltung',
@@ -335,6 +345,7 @@ export const translations = {
     navMonthlyReports: 'Monthly Reports',
     navAnnualReport: 'Annual Report',
     navBank: 'Bank',
+    navInvoices: 'Invoices',
     navSettings: 'Settings',
     navUserManagement: 'User Management',
     navAuditLog: 'Audit Log',
@@ -377,6 +388,7 @@ export const translations = {
     thVat: 'VAT',
     thBalance: 'Cash Balance',
     thDocument: 'Document',
+    thCompanyName: 'Company Name',
     thActions: 'Actions',
     tblOpeningBalance: 'Opening Balance',
     tblNoEntries: 'No Entries Available',
@@ -524,6 +536,14 @@ export const translations = {
     confirmFinalizeDesc: 'Are you sure you want to lock fiscal year {year}? Once finalized, transactions for this year cannot be modified.',
     confirmUnlockTitle: 'Unlock Fiscal Year {year}?',
     confirmUnlockDesc: 'Are you sure you want to unlock fiscal year {year} to allow modifications?',
+    
+    // Module Management
+    secModuleManagement: '🧩 Module Management (Enable / Disable Modules)',
+    descModuleManagement: 'Enable or disable navigation modules as needed. Cash Book and Settings are mandatory modules and cannot be disabled.',
+    moduleMandatory: 'Mandatory Module (Always Active)',
+    moduleActive: 'Active',
+    moduleInactive: 'Disabled',
+    toastModuleUpdated: 'Module configuration updated successfully.',
 
     // User Management Page
     userMgmtTitle: 'User Management',

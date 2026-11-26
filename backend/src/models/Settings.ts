@@ -1,5 +1,14 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IEnabledModules {
+  cashBook: boolean;
+  monthlyReports: boolean;
+  annualReport: boolean;
+  bank: boolean;
+  invoices: boolean;
+  settings: boolean;
+}
+
 export interface ISettings extends Document {
   openingBalance: number;
   openingBalanceDate?: Date;
@@ -12,6 +21,7 @@ export interface ISettings extends Document {
   finalizedYears: number[];
   lockedMonths: string[];
   unlockedMonths: string[];
+  enabledModules?: IEnabledModules;
   updatedAt: Date;
 }
 
@@ -27,6 +37,14 @@ const settingsSchema = new Schema<ISettings>({
   finalizedYears: { type: [Number], default: [] },
   lockedMonths: { type: [String], default: [] },
   unlockedMonths: { type: [String], default: [] },
+  enabledModules: {
+    cashBook: { type: Boolean, default: true },
+    monthlyReports: { type: Boolean, default: true },
+    annualReport: { type: Boolean, default: true },
+    bank: { type: Boolean, default: true },
+    invoices: { type: Boolean, default: true },
+    settings: { type: Boolean, default: true },
+  },
 }, { timestamps: true });
 
 export const Settings = mongoose.model<ISettings>('Settings', settingsSchema);
